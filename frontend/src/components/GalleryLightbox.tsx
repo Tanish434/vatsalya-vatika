@@ -13,10 +13,13 @@ export const GalleryLightbox: React.FC = () => {
   const sectionRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
-    galleryService.getGallery()
-      .then(data => setGallery(data))
-      .catch(err => console.error('Failed to load gallery:', err))
-      .finally(() => setLoading(false));
+    const unsubscribe = galleryService.subscribeToGallery((data) => {
+      setGallery(data);
+      setLoading(false);
+    });
+    return () => {
+      if (typeof unsubscribe === 'function') unsubscribe();
+    };
   }, []);
 
   useEffect(() => {

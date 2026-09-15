@@ -76,10 +76,13 @@ export const EventsSection: React.FC = () => {
   const sectionRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
-    eventService.getEvents()
-      .then(data => setEvents(data))
-      .catch(err => console.error('Failed to load events:', err))
-      .finally(() => setLoading(false));
+    const unsubscribe = eventService.subscribeToEvents((data) => {
+      setEvents(data);
+      setLoading(false);
+    });
+    return () => {
+      if (typeof unsubscribe === 'function') unsubscribe();
+    };
   }, []);
 
   useEffect(() => {

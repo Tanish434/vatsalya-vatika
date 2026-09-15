@@ -173,31 +173,27 @@ export const TopContributors: React.FC = () => {
   const sectionRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const settings = await siteSettingsService.getSettings();
-        // Explicitly check showDonors; if false, hide section
-        if (settings && settings.showDonors === false) {
-          setShowSection(false);
-          setLoading(false);
-          return;
-        }
+    const unsubSettings = siteSettingsService.subscribeToSiteSettings((settings) => {
+      if (settings && settings.showDonors === false) {
+        setShowSection(false);
+      } else {
         setShowSection(true);
-        const all = await contributionService.getContributions();
-        const top = [...all]
-          .filter(c => c.paymentStatus === 'completed')
-          .sort((a, b) => b.amount - a.amount)
-          .slice(0, 6);
-        setContributors(top);
-      } catch (e) {
-        console.error('Failed to load top contributors:', e);
-        // On error, still show section (with empty/placeholder state)
-        setShowSection(true);
-      } finally {
-        setLoading(false);
       }
+    });
+
+    const unsubContrib = contributionService.subscribeToContributions((all) => {
+      const top = [...all]
+        .filter((c) => c.paymentStatus === 'completed')
+        .sort((a, b) => b.amount - a.amount)
+        .slice(0, 6);
+      setContributors(top);
+      setLoading(false);
+    });
+
+    return () => {
+      if (typeof unsubSettings === 'function') unsubSettings();
+      if (typeof unsubContrib === 'function') unsubContrib();
     };
-    fetchData();
   }, []);
 
   // Intersection Observer for scroll-triggered animation

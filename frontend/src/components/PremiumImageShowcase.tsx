@@ -16,18 +16,14 @@ export const PremiumImageShowcase: React.FC = () => {
   const swiperRef = useRef<any>(null);
 
   useEffect(() => {
-    const fetchImages = async () => {
-      try {
-        const data = await carouselService.getImages();
-        const activeImages = data.filter(img => img.isActive);
-        setImages(activeImages);
-      } catch (err) {
-        console.error('Failed to load showcase images:', err);
-      } finally {
-        setLoading(false);
-      }
+    const unsub = carouselService.subscribeToCarousel((data) => {
+      const activeImages = data.filter(img => img.isActive);
+      setImages(activeImages);
+      setLoading(false);
+    });
+    return () => {
+      if (typeof unsub === 'function') unsub();
     };
-    fetchImages();
   }, []);
 
   if (loading) {

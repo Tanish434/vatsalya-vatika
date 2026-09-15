@@ -122,18 +122,15 @@ export const ReviewsSection: React.FC = () => {
   const autoScrollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const sectionRef = useRef<HTMLElement>(null);
 
-  const fetchReviews = async () => {
-    try {
-      const data = await reviewService.getPublicReviews();
+  useEffect(() => {
+    const unsub = reviewService.subscribeToPublicReviews((data) => {
       setReviews(data);
-    } catch (e) {
-      console.error('Failed to load reviews:', e);
-    } finally {
       setLoading(false);
-    }
-  };
-
-  useEffect(() => { fetchReviews(); }, []);
+    });
+    return () => {
+      if (typeof unsub === 'function') unsub();
+    };
+  }, []);
 
   // Intersection Observer
   useEffect(() => {

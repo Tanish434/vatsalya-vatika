@@ -303,17 +303,13 @@ export const AshramCardsPage: React.FC = () => {
 
   useEffect(() => {
     window.scrollTo(0, 0);
-    const load = async () => {
-      try {
-        const cards = await memoryVaultService.getCards();
-        setAllCards(cards);
-      } catch (err) {
-        console.error('Failed to load memory vault cards:', err);
-      } finally {
-        setLoading(false);
-      }
+    const unsub = memoryVaultService.subscribeToCards((cards) => {
+      setAllCards(cards);
+      setLoading(false);
+    });
+    return () => {
+      if (typeof unsub === 'function') unsub();
     };
-    load();
   }, []);
 
   return (

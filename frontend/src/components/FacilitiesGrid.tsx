@@ -64,10 +64,13 @@ export const FacilitiesGrid: React.FC = () => {
   const sectionRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
-    facilityService.getFacilities()
-      .then(data => setFacilities(data))
-      .catch(err => console.error('Failed to load facilities:', err))
-      .finally(() => setLoading(false));
+    const unsub = facilityService.subscribeToFacilities((data) => {
+      setFacilities(data);
+      setLoading(false);
+    });
+    return () => {
+      if (typeof unsub === 'function') unsub();
+    };
   }, []);
 
   useEffect(() => {

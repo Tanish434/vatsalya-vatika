@@ -35,13 +35,16 @@ export const StudentLife: React.FC = () => {
   const [students, setStudents] = useState<any[]>(DEFAULT_PILLARS);
 
   useEffect(() => {
-    studentImageService.getAll().then((items) => {
-      if (items.length > 0) {
+    const unsub = studentImageService.subscribeToStudentImages((items) => {
+      if (items && items.length > 0) {
         setStudents(items);
       } else {
         setStudents(DEFAULT_PILLARS);
       }
-    }).catch(() => {});
+    });
+    return () => {
+      if (typeof unsub === 'function') unsub();
+    };
   }, []);
 
   return (

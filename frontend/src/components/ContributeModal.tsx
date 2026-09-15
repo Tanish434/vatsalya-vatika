@@ -27,9 +27,10 @@ export const ContributeModal: React.FC<ContributeModalProps> = ({ isOpen, onClos
   
   React.useEffect(() => {
     if (isOpen) {
-      donationSettingsService.getSettings()
-        .then(setDonationSettings)
-        .catch(err => console.error("Failed to load donation settings:", err));
+      const unsub = donationSettingsService.subscribeToDonationSettings(setDonationSettings);
+      return () => {
+        if (typeof unsub === 'function') unsub();
+      };
     }
   }, [isOpen]);
 

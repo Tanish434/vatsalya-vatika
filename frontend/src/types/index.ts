@@ -13,7 +13,9 @@ export interface EventItem {
 export interface GalleryItem {
   _id: string;
   title: string;
-  image: string;
+  image: string; // URL for image or video thumbnail / source
+  mediaType?: 'image' | 'video';
+  videoUrl?: string;
   category: 'Students' | 'Events' | 'Ashram' | 'Activities';
   description?: string;
   focalPoint?: { x: number; y: number };

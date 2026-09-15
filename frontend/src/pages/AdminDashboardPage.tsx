@@ -42,7 +42,11 @@ import {
   Filter,
   Layers,
   Eye,
-  GraduationCap
+  GraduationCap,
+  QrCode,
+  Copy,
+  Download,
+  Link2
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
@@ -63,6 +67,7 @@ import { carouselService } from '../services/carouselService';
 import { donationSettingsService, DonationSettings } from '../services/donationSettingsService';
 import api from '../services/api';
 import toast from 'react-hot-toast';
+import { uploadMediaWithProgress, isFirebaseConfigured } from '../lib/firebase';
 
 const DEFAULT_DESCRIPTIONS: Record<string, string> = {
   education: 'Formal schooling support, interactive digital science labs, language literacy, homework assistance, and conceptual clarity.',
@@ -169,6 +174,10 @@ export const AdminDashboardPage: React.FC = () => {
   const [siteSettings, setSiteSettings] = useState<SiteSettingsData | null>(null);
   const [donationSettings, setDonationSettings] = useState<DonationSettings | null>(null);
   const qrFileInputRef = useRef<HTMLInputElement>(null);
+  const modalQrFileInputRef = useRef<HTMLInputElement>(null);
+  const [showQrModal, setShowQrModal] = useState(false);
+  const [qrUrlInput, setQrUrlInput] = useState('');
+  const tabsContainerRef = useRef<HTMLDivElement>(null);
   const [reviews, setReviews] = useState<ReviewItem[]>([]);
   const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -217,20 +226,14 @@ export const AdminDashboardPage: React.FC = () => {
   const [showContributionModal, setShowContributionModal] = useState(false);
   const [contributionForm, setContributionForm] = useState({ name: '', email: '', amount: 0, purpose: 'General Support', paymentStatus: 'completed', paymentRef: '' });
 
-  const [dbStatus, setDbStatus] = useState<'connected' | 'fallback' | 'checking'>('checking');
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [dbStatus, setDbStatus] = useState<'connected' | 'fallback' | 'checking'>(
+    isFirebaseConfigured ? 'connected' : 'fallback'
+  );
   const loadedTabs = useRef<Set<string>>(new Set());
 
-  const checkDbHealth = useCallback(async () => {
-    try {
-      const res = await api.get('/health');
-      if (res.data?.isMongoConnected || res.data?.database === 'connected') {
-        setDbStatus('connected');
-      } else {
-        setDbStatus('fallback');
-      }
-    } catch {
-      setDbStatus('fallback');
-    }
+  const checkDbHealth = useCallback(() => {
+    setDbStatus(isFirebaseConfigured ? 'connected' : 'fallback');
   }, []);
 
   const loadTabData = useCallback(async (tabName: string, force = false) => {
@@ -360,11 +363,44 @@ export const AdminDashboardPage: React.FC = () => {
     }
     loadInitialData();
     checkDbHealth();
+
+    const unsubContacts = contactService.subscribeToContacts((items) => {
+      setContacts(items);
+    });
+    const unsubContrib = contributionService.subscribeToContributions((items) => {
+      setContributions(items);
+    });
+    const unsubAct = activityService.subscribeToActivities((items) => {
+      setActivities(items);
+      setUnreadCount(items.filter(a => !a.isRead).length);
+    });
+
+    return () => {
+      if (typeof unsubContacts === 'function') unsubContacts();
+      if (typeof unsubContrib === 'function') unsubContrib();
+      if (typeof unsubAct === 'function') unsubAct();
+    };
   }, [isAuthenticated, user, navigate, loadInitialData, checkDbHealth]);
 
   useEffect(() => {
     loadTabData(activeTab);
   }, [activeTab, loadTabData]);
+
+  // Enable smooth horizontal scrolling on hover using mouse wheel
+  useEffect(() => {
+    const el = tabsContainerRef.current;
+    if (!el) return;
+
+    const onWheel = (e: WheelEvent) => {
+      if (e.deltaY !== 0) {
+        e.preventDefault();
+        el.scrollLeft += e.deltaY * 1.2;
+      }
+    };
+
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, []);
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -398,17 +434,18 @@ export const AdminDashboardPage: React.FC = () => {
         description: vaultForm.description || ''
       };
       if (editingVaultCard) {
-        await memoryVaultService.updateCard(editingVaultCard._id, submitData);
+        const updated = await memoryVaultService.updateCard(editingVaultCard._id, submitData);
+        setMemoryVaultCards(prev => prev.map(c => c._id === editingVaultCard._id ? updated : c));
         toast.success('Memory card updated successfully');
       } else {
-        await memoryVaultService.createCard(submitData);
+        const created = await memoryVaultService.createCard(submitData);
+        setMemoryVaultCards(prev => [created, ...prev]);
         toast.success('Memory card added to vault!');
       }
       setShowVaultModal(false);
       setEditingVaultCard(null);
       setVaultForm({ title: '', image: '', description: '', category: 'Memories', focalPoint: { x: 50, y: 50 } });
       setVaultPreview(false);
-      loadTabData('memoryvault', true);
     } catch (err) {
       toast.error('Failed to save memory card');
     }
@@ -418,8 +455,8 @@ export const AdminDashboardPage: React.FC = () => {
     if (!window.confirm('Remove this card from the Memory Vault?')) return;
     try {
       await memoryVaultService.deleteCard(id);
+      setMemoryVaultCards(prev => prev.filter(c => c._id !== id));
       toast.success('Memory card removed');
-      loadTabData('memoryvault', true);
     } catch (err) {
       toast.error('Failed to delete memory card');
     }
@@ -438,48 +475,36 @@ export const AdminDashboardPage: React.FC = () => {
     setShowVaultModal(true);
   };
 
-  // Helper to handle local file upload with canvas compression to lightweight Base64 Data URL (under 250KB)
-  const handleFileUpload = (file: File, callback: (dataUrl: string) => void, maxDimension = 1000, quality = 0.75) => {
+  // Helper to handle direct cloud & local file upload (Images & Videos) with progress tracking
+  const handleFileUpload = async (file: File, callback: (mediaUrl: string) => void) => {
     if (!file) return;
-    const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
-    if (!validTypes.includes(file.type)) {
-      toast.error('Unsupported format. Please upload JPG, PNG, or WebP.');
-      return;
+    try {
+      setUploadProgress(15);
+      const res = await uploadMediaWithProgress(file, 'media', (pct) => {
+        setUploadProgress(pct);
+      });
+      callback(res.url);
+      toast.success(`${res.mediaType === 'video' ? 'Video' : 'Image'} uploaded successfully!`);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to upload file.');
+    } finally {
+      setTimeout(() => setUploadProgress(null), 800);
     }
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const img = new Image();
-      img.onload = () => {
-        const scale = Math.min(1, maxDimension / Math.max(img.width, img.height));
-        const canvas = document.createElement('canvas');
-        canvas.width = Math.max(1, Math.round(img.width * scale));
-        canvas.height = Math.max(1, Math.round(img.height * scale));
-        const ctx = canvas.getContext('2d');
-        if (!ctx) {
-          callback(e.target?.result as string);
-          return;
-        }
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        const compressed = canvas.toDataURL('image/jpeg', quality);
-        const sizeKB = Math.round((compressed.length * 3 / 4) / 1024);
-        callback(compressed);
-        toast.success(`Image optimized & loaded (${sizeKB} KB)!`);
-      };
-      img.onerror = () => {
-        toast.error('Failed to process image file.');
-      };
-      img.src = e.target?.result as string;
-    };
-    reader.onerror = () => toast.error('Failed to read image file.');
-    reader.readAsDataURL(file);
   };
 
   // Helper to process and validate QR code upload for Donation Settings
   const processQrCodeFile = (file: File) => {
     if (!file) return;
-    handleFileUpload(file, (dataUrl) => {
+    handleFileUpload(file, async (dataUrl) => {
       setDonationSettings(prev => prev ? { ...prev, qrCodeImage: dataUrl } : null);
-    }, 800, 0.85);
+      try {
+        const updated = await donationSettingsService.updateSettings({ qrCodeImage: dataUrl });
+        setDonationSettings(updated);
+        toast.success('Donation QR Code updated and saved live!');
+      } catch (err: any) {
+        console.error('Failed to auto-save QR code:', err);
+      }
+    });
   };
 
   const handleQrCodeFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -488,6 +513,33 @@ export const AdminDashboardPage: React.FC = () => {
       processQrCodeFile(file);
     }
     e.target.value = '';
+  };
+
+  const handleSaveQrUrl = async (url: string) => {
+    const trimmed = url.trim();
+    if (!trimmed) {
+      toast.error('Please enter a valid image URL');
+      return;
+    }
+    try {
+      const updated = await donationSettingsService.updateSettings({ qrCodeImage: trimmed });
+      setDonationSettings(updated);
+      setQrUrlInput('');
+      toast.success('Donation QR Code updated and saved live!');
+    } catch (err: any) {
+      toast.error('Failed to update QR code URL');
+    }
+  };
+
+  const handleRemoveQr = async () => {
+    if (!window.confirm('Are you sure you want to remove the custom QR code? The website will display the default Ashram QR.')) return;
+    try {
+      const updated = await donationSettingsService.updateSettings({ qrCodeImage: '' });
+      setDonationSettings(updated);
+      toast.success('Custom QR code removed. Reverted to default.');
+    } catch (err: any) {
+      toast.error('Failed to remove QR code');
+    }
   };
 
   // --- STUDENT IMAGES CRUD ---
@@ -499,16 +551,17 @@ export const AdminDashboardPage: React.FC = () => {
     }
     try {
       if (editingStudentImage) {
-        await studentImageService.update(editingStudentImage._id, studentImageForm);
+        const updated = await studentImageService.update(editingStudentImage._id, studentImageForm);
+        setStudentImages(prev => prev.map(s => s._id === editingStudentImage._id ? updated : s));
         toast.success('Student entry updated successfully');
       } else {
-        await studentImageService.create(studentImageForm);
+        const created = await studentImageService.create(studentImageForm);
+        setStudentImages(prev => [created, ...prev]);
         toast.success('Student entry created successfully');
       }
       setShowStudentImageModal(false);
       setEditingStudentImage(null);
       setStudentImageForm({ title: '', image: '', description: '', focalPoint: { x: 50, y: 50 } });
-      loadTabData('our_students', true);
     } catch (err) {
       toast.error('Failed to save student entry');
     }
@@ -518,8 +571,8 @@ export const AdminDashboardPage: React.FC = () => {
     if (!window.confirm('Are you sure you want to delete this student entry?')) return;
     try {
       await studentImageService.remove(id);
+      setStudentImages(prev => prev.filter(s => s._id !== id));
       toast.success('Student entry deleted');
-      loadTabData('our_students', true);
     } catch (err) {
       toast.error('Failed to delete student entry');
     }
@@ -534,16 +587,17 @@ export const AdminDashboardPage: React.FC = () => {
     }
     try {
       if (editingEvent) {
-        await eventService.updateEvent(editingEvent._id, eventForm);
+        const updated = await eventService.updateEvent(editingEvent._id, eventForm);
+        setEvents(prev => prev.map(ev => ev._id === editingEvent._id ? updated : ev));
         toast.success('Event updated successfully');
       } else {
-        await eventService.createEvent(eventForm);
+        const created = await eventService.createEvent(eventForm);
+        setEvents(prev => [created, ...prev]);
         toast.success('Event created successfully');
       }
       setShowEventModal(false);
       setEditingEvent(null);
       setEventForm({ title: '', description: '', image: '', date: '', category: 'Educational Events', location: 'Vatsalya Vatika Campus', focalPoint: { x: 50, y: 50 } });
-      loadTabData('events', true);
     } catch (err) {
       toast.error('Failed to save event');
     }
@@ -553,8 +607,8 @@ export const AdminDashboardPage: React.FC = () => {
     if (!window.confirm('Are you sure you want to delete this event?')) return;
     try {
       await eventService.deleteEvent(id);
+      setEvents(prev => prev.filter(e => e._id !== id));
       toast.success('Event deleted successfully');
-      loadTabData('events', true);
     } catch (err) {
       toast.error('Failed to delete event');
     }
@@ -569,18 +623,20 @@ export const AdminDashboardPage: React.FC = () => {
     }
     try {
       if (editingGalleryItem) {
-        await galleryService.updateGalleryItem(editingGalleryItem._id, galleryForm);
+        const updated = await galleryService.updateGalleryItem(editingGalleryItem._id, galleryForm);
+        setGallery((prev) => prev.map((item) => (item._id === editingGalleryItem._id ? updated : item)));
         toast.success('Gallery item updated successfully');
       } else {
-        await galleryService.createGalleryItem(galleryForm);
+        const created = await galleryService.createGalleryItem(galleryForm);
+        setGallery((prev) => [created, ...prev]);
         toast.success('Gallery item added successfully');
       }
       setShowGalleryModal(false);
       setEditingGalleryItem(null);
       setGalleryForm({ title: '', image: '', category: 'Ashram', description: '', focalPoint: { x: 50, y: 50 } });
-      loadTabData('gallery', true);
-    } catch (err) {
-      toast.error('Failed to add gallery item');
+    } catch (err: any) {
+      console.error('Save gallery error:', err);
+      toast.error(err?.message || 'Failed to add gallery item');
     }
   };
 
@@ -588,8 +644,8 @@ export const AdminDashboardPage: React.FC = () => {
     if (!window.confirm('Are you sure you want to delete this image?')) return;
     try {
       await galleryService.deleteGalleryItem(id);
+      setGallery((prev) => prev.filter((item) => item._id !== id));
       toast.success('Gallery image deleted');
-      loadTabData('gallery', true);
     } catch (err) {
       toast.error('Failed to delete gallery image');
     }
@@ -599,11 +655,11 @@ export const AdminDashboardPage: React.FC = () => {
   const handleSaveFacility = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await facilityService.createFacility(facilityForm);
+      const created = await facilityService.createFacility(facilityForm);
+      setFacilities(prev => [created, ...prev]);
       toast.success('Facility added successfully');
       setShowFacilityModal(false);
       setFacilityForm({ title: '', description: '', icon: 'BookOpen', focalPoint: { x: 50, y: 50 } });
-      loadTabData('facilities', true);
     } catch (err) {
       toast.error('Failed to add facility');
     }
@@ -613,8 +669,8 @@ export const AdminDashboardPage: React.FC = () => {
     if (!window.confirm('Are you sure you want to delete this facility?')) return;
     try {
       await facilityService.deleteFacility(id);
+      setFacilities(prev => prev.filter(f => f._id !== id));
       toast.success('Facility deleted');
-      loadTabData('facilities', true);
     } catch (err) {
       toast.error('Failed to delete facility');
     }
@@ -688,33 +744,25 @@ export const AdminDashboardPage: React.FC = () => {
                   className={`inline-flex items-center gap-1 sm:gap-1.5 px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-semibold border transition-all ${
                     dbStatus === 'connected'
                       ? 'bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800'
-                      : dbStatus === 'fallback'
-                      ? 'bg-amber-50 text-amber-700 border-amber-300 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-800'
-                      : 'bg-slate-100 text-slate-600 border-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700'
+                      : 'bg-amber-50 text-amber-700 border-amber-300 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-800'
                   }`}
                   title={
                     dbStatus === 'connected'
-                      ? 'MongoDB Atlas is connected and syncing live'
-                      : dbStatus === 'fallback'
-                      ? 'Running with built-in high performance fallback store'
-                      : 'Checking database connectivity...'
+                      ? 'Firebase Cloud is connected with live real-time sync'
+                      : 'Running with instant local live synchronization'
                   }
                 >
                   <span
                     className={`w-1.5 h-1.5 rounded-full ${
                       dbStatus === 'connected'
                         ? 'bg-emerald-500 animate-pulse'
-                        : dbStatus === 'fallback'
-                        ? 'bg-amber-500'
-                        : 'bg-slate-400 animate-ping'
+                        : 'bg-amber-500'
                     }`}
                   />
                   <span>
                     {dbStatus === 'connected'
-                      ? 'Atlas Connected'
-                      : dbStatus === 'fallback'
-                      ? 'Local Fallback'
-                      : 'Checking...'}
+                      ? 'Firebase Live Sync'
+                      : 'Local Live Sync'}
                   </span>
                 </div>
               </div>
@@ -725,27 +773,15 @@ export const AdminDashboardPage: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
+
+            {/* Direct Quick Action: Change QR Code */}
             <button
-              onClick={async () => {
-                const toastId = toast.loading('Synchronizing & uploading all ashram images to MongoDB Atlas...');
-                try {
-                  const res = await api.post('/seed');
-                  if (res.data?.success) {
-                    toast.success('All images, carousels, and events uploaded to Database!', { id: toastId });
-                    checkDbHealth();
-                    await loadAllData();
-                  } else {
-                    toast.error(res.data?.message || 'Sync failed', { id: toastId });
-                  }
-                } catch (err: any) {
-                  toast.error('Sync failed: ' + (err.response?.data?.message || err.message), { id: toastId });
-                }
-              }}
-              className="inline-flex items-center gap-1 sm:gap-1.5 px-2.5 py-1.5 sm:px-3.5 sm:py-2 rounded-xl text-[11px] sm:text-xs font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-900/50 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors shadow-sm shrink-0 whitespace-nowrap"
-              title="Upload / Seed All Images & Records into MongoDB Atlas Database"
+              onClick={() => setShowQrModal(true)}
+              className="inline-flex items-center gap-1 sm:gap-1.5 px-2.5 py-1.5 sm:px-3.5 sm:py-2 rounded-xl text-[11px] sm:text-xs font-bold bg-amber-500/15 hover:bg-amber-500/25 text-amber-800 dark:text-amber-200 border border-amber-300/70 dark:border-amber-700/60 transition-all shadow-sm shrink-0 cursor-pointer active:scale-95"
+              title="Change Donation QR Code"
             >
-              <RefreshCw className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
-              <span>Sync Database</span>
+              <QrCode className="w-3.5 h-3.5 text-ashram-saffron shrink-0" />
+              <span>Change QR</span>
             </button>
 
             <Link
@@ -843,23 +879,27 @@ export const AdminDashboardPage: React.FC = () => {
         </div>
 
         {/* Tab Navigation */}
-        <div className="border-b border-ashram-border dark:border-darkAshram-border flex items-center justify-between overflow-x-auto no-scrollbar scroll-smooth">
-          <div className="flex gap-2 sm:gap-4 min-w-max pb-0.5">
-            {[
-              { id: 'events', label: 'Events', icon: Calendar },
-              { id: 'gallery', label: 'Gallery', icon: ImageIcon },
-              { id: 'memoryvault', label: 'Memory Vault', icon: Layers },
-              { id: 'facilities', label: 'Facilities', icon: Sparkles },
-              { id: 'messages', label: 'Messages', icon: Mail },
-              { id: 'contributions', label: 'Donations', icon: Heart },
-              { id: 'donation_settings', label: 'Donation Settings', icon: ShieldCheck },
-              { id: 'reviews', label: 'Reviews', icon: Star },
-              { id: 'users', label: 'Users', icon: Users },
-              { id: 'settings', label: 'Site Settings', icon: Settings },
-              { id: 'our_students', label: 'Our Students', icon: GraduationCap },
-              { id: 'carousel', label: 'Gallery Showcase', icon: ImageIcon },
-              { id: 'activity', label: 'Activity Log', icon: Bell, badge: unreadCount > 0 ? unreadCount : undefined }
-            ].map((tab) => {
+        <div className="border-b border-ashram-border dark:border-darkAshram-border flex items-center justify-between gap-2">
+          <div
+            ref={tabsContainerRef}
+            className="flex-1 overflow-x-auto no-scrollbar scroll-smooth [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+          >
+            <div className="flex gap-2 sm:gap-4 min-w-max pb-0.5">
+              {[
+                { id: 'events', label: 'Events', icon: Calendar },
+                { id: 'gallery', label: 'Gallery', icon: ImageIcon },
+                { id: 'memoryvault', label: 'Memory Vault', icon: Layers },
+                { id: 'facilities', label: 'Facilities', icon: Sparkles },
+                { id: 'messages', label: 'Messages', icon: Mail, badge: contacts.filter(c => c.status === 'new').length > 0 ? contacts.filter(c => c.status === 'new').length : undefined },
+                { id: 'contributions', label: 'Donations', icon: Heart },
+                { id: 'donation_settings', label: 'Donation & QR Code', icon: QrCode },
+                { id: 'reviews', label: 'Reviews', icon: Star },
+                { id: 'users', label: 'Users', icon: Users },
+                { id: 'settings', label: 'Site Settings', icon: Settings },
+                { id: 'our_students', label: 'Our Students', icon: GraduationCap },
+                { id: 'carousel', label: 'Gallery Showcase', icon: ImageIcon },
+                { id: 'activity', label: 'Activity Log', icon: Bell, badge: unreadCount > 0 ? unreadCount : undefined }
+              ].map((tab) => {
               const Icon = tab.icon;
               return (
                 <button
@@ -880,6 +920,7 @@ export const AdminDashboardPage: React.FC = () => {
                 </button>
               );
             })}
+            </div>
           </div>
 
           <button
@@ -940,10 +981,15 @@ export const AdminDashboardPage: React.FC = () => {
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-ashram-charcoal dark:text-darkAshram-text mb-2">
-                    Donation QR Code
-                  </label>
+                <div id="admin-qr-section" className="space-y-3 pt-2">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-semibold text-ashram-charcoal dark:text-darkAshram-text">
+                      Donation QR Code
+                    </label>
+                    <span className="text-[10px] text-ashram-muted dark:text-darkAshram-muted">
+                      Changes auto-save live to public website
+                    </span>
+                  </div>
 
                   {/* Hidden file input for native device selection */}
                   <input
@@ -953,6 +999,21 @@ export const AdminDashboardPage: React.FC = () => {
                     onChange={handleQrCodeFileChange}
                     className="hidden"
                   />
+
+                  {uploadProgress !== null && (
+                    <div className="space-y-1 py-2 max-w-sm">
+                      <div className="flex justify-between text-[10px] font-semibold text-ashram-saffron">
+                        <span>Uploading QR Code...</span>
+                        <span>{uploadProgress}%</span>
+                      </div>
+                      <div className="w-full bg-gray-200 dark:bg-darkAshram-surface rounded-full h-1.5 overflow-hidden">
+                        <div
+                          className="bg-ashram-saffron h-1.5 transition-all duration-300"
+                          style={{ width: `${uploadProgress}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
 
                   {donationSettings?.qrCodeImage ? (
                     <div className="p-4 sm:p-5 rounded-2xl border border-ashram-border dark:border-darkAshram-border bg-ashram-cream/30 dark:bg-darkAshram-surface/40 flex flex-col sm:flex-row items-center sm:items-start gap-5 transition-all">
@@ -965,7 +1026,7 @@ export const AdminDashboardPage: React.FC = () => {
                           />
                         </div>
                         <span className="absolute -top-2 -right-2 bg-emerald-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow flex items-center gap-1">
-                          <CheckCheck className="w-3 h-3" /> Preview
+                          <CheckCheck className="w-3 h-3" /> Live Active
                         </span>
                       </div>
 
@@ -983,20 +1044,38 @@ export const AdminDashboardPage: React.FC = () => {
                           <button
                             type="button"
                             onClick={() => qrFileInputRef.current?.click()}
-                            className="px-4 py-2 rounded-xl text-xs font-semibold bg-ashram-saffron/10 hover:bg-ashram-saffron/20 text-ashram-saffron border border-ashram-saffron/30 hover:border-ashram-saffron transition-all flex items-center gap-2 active:scale-95 cursor-pointer"
+                            className="px-4 py-2 rounded-xl text-xs font-semibold bg-ashram-saffron hover:bg-ashram-saffronHover text-white shadow-soft transition-all flex items-center gap-2 active:scale-95 cursor-pointer"
                           >
                             <Upload className="w-3.5 h-3.5" />
-                            <span>Change QR Code</span>
+                            <span>Change QR (File Upload)</span>
                           </button>
+
+                          <a
+                            href={donationSettings.qrCodeImage}
+                            download="donation-qr.jpg"
+                            target="_blank"
+                            rel="noreferrer"
+                            className="px-3.5 py-2 rounded-xl text-xs font-semibold bg-white dark:bg-darkAshram-surface hover:bg-ashram-cream text-ashram-charcoal dark:text-darkAshram-text border border-ashram-border dark:border-darkAshram-border transition-all flex items-center gap-1.5 active:scale-95"
+                          >
+                            <Download className="w-3.5 h-3.5" />
+                            <span>Download</span>
+                          </a>
 
                           <button
                             type="button"
                             onClick={() => {
-                              if (window.confirm('Are you sure you want to remove this donation QR code?')) {
-                                setDonationSettings(prev => prev ? { ...prev, qrCodeImage: '' } : null);
-                                toast.success('QR code removed. Click "Save Securely" to apply changes.');
-                              }
+                              navigator.clipboard.writeText(donationSettings.qrCodeImage || '');
+                              toast.success('QR Code URL copied!');
                             }}
+                            className="px-3.5 py-2 rounded-xl text-xs font-semibold bg-white dark:bg-darkAshram-surface hover:bg-ashram-cream text-ashram-charcoal dark:text-darkAshram-text border border-ashram-border dark:border-darkAshram-border transition-all flex items-center gap-1.5 active:scale-95 cursor-pointer"
+                          >
+                            <Copy className="w-3.5 h-3.5" />
+                            <span>Copy URL</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={handleRemoveQr}
                             className="px-3.5 py-2 rounded-xl text-xs font-semibold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/30 hover:bg-rose-100 dark:hover:bg-rose-950/60 border border-rose-200 dark:border-rose-900/40 transition-all flex items-center gap-1.5 active:scale-95 cursor-pointer"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -1043,6 +1122,29 @@ export const AdminDashboardPage: React.FC = () => {
                       </div>
                     </div>
                   )}
+
+                  {/* Or Paste Direct Image URL */}
+                  <div className="pt-2">
+                    <label className="block text-[11px] font-semibold text-ashram-charcoal dark:text-darkAshram-text mb-1.5">
+                      Or Paste Image URL directly:
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        type="url"
+                        placeholder="https://example.com/donation-qr.jpg"
+                        value={qrUrlInput}
+                        onChange={(e) => setQrUrlInput(e.target.value)}
+                        className="flex-1 px-3 py-2 rounded-xl border border-ashram-border dark:border-darkAshram-border bg-transparent text-xs focus:border-ashram-saffron focus:outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleSaveQrUrl(qrUrlInput)}
+                        className="px-4 py-2 rounded-xl text-xs font-semibold bg-ashram-saffron hover:bg-ashram-saffronHover text-white shadow transition-all cursor-pointer shrink-0"
+                      >
+                        Set QR Link
+                      </button>
+                    </div>
+                  </div>
                 </div>
 
                 <div className="pt-4 border-t border-ashram-border dark:border-darkAshram-border flex justify-end">
@@ -1169,6 +1271,22 @@ export const AdminDashboardPage: React.FC = () => {
                               handleFileUpload(file, (dataUrl) => setCarouselForm(f => ({ ...f, image: dataUrl })));
                             }
                           }} className="w-full text-sm file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-ashram-saffron/10 file:text-ashram-saffron file:font-semibold hover:file:bg-ashram-saffron/20 cursor-pointer" />
+
+                          {uploadProgress !== null && (
+                            <div className="space-y-1 py-1">
+                              <div className="flex justify-between text-[10px] font-semibold text-ashram-saffron">
+                                <span>Uploading to Cloud...</span>
+                                <span>{uploadProgress}%</span>
+                              </div>
+                              <div className="w-full bg-gray-200 dark:bg-darkAshram-surface rounded-full h-1.5 overflow-hidden">
+                                <div
+                                  className="bg-ashram-saffron h-1.5 transition-all duration-300"
+                                  style={{ width: `${uploadProgress}%` }}
+                                />
+                              </div>
+                            </div>
+                          )}
+
                           <div className="text-center text-xs text-ashram-muted">or</div>
                           <input type="text" value={carouselForm.image} onChange={e => setCarouselForm(f => ({ ...f, image: e.target.value }))} placeholder="Paste image URL..." className="w-full px-3 py-2 rounded-xl border border-ashram-border dark:border-darkAshram-border bg-transparent text-sm focus:outline-none focus:border-ashram-saffron transition-colors" />
                         </div>
@@ -1582,11 +1700,19 @@ export const AdminDashboardPage: React.FC = () => {
               <h3 className="font-heading font-bold text-xl sm:text-2xl text-ashram-green dark:text-darkAshram-gold">
                 Recorded Contributions ({contributions.length})
               </h3>
-              <div className="flex items-center gap-3 sm:gap-4 text-right">
+              <div className="flex items-center gap-2.5 sm:gap-3 text-right">
                 <div>
                   <span className="text-[10px] sm:text-xs text-ashram-muted block">Total Pledged</span>
                   <span className="font-heading font-bold text-lg sm:text-2xl text-ashram-saffron">₹{totalContributionAmount.toLocaleString()}</span>
                 </div>
+                <button
+                  onClick={() => setShowQrModal(true)}
+                  className="inline-flex items-center gap-1.5 sm:gap-2 px-3 py-2 sm:px-3.5 sm:py-2.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-800 dark:text-amber-200 border border-amber-300 dark:border-amber-700/60 text-xs font-semibold shadow-sm cursor-pointer"
+                  title="Change public donation QR code"
+                >
+                  <QrCode className="w-4 h-4 text-ashram-saffron" />
+                  <span>Change QR Code</span>
+                </button>
                 <button
                   onClick={() => setShowContributionModal(true)}
                   className="inline-flex items-center gap-1.5 sm:gap-2 px-3.5 py-2 sm:px-4 sm:py-2.5 rounded-xl bg-ashram-saffron hover:bg-ashram-saffronHover text-white text-xs font-semibold shadow"
@@ -1594,6 +1720,37 @@ export const AdminDashboardPage: React.FC = () => {
                   <Plus className="w-4 h-4" /> Add Donation
                 </button>
               </div>
+            </div>
+
+            {/* Quick QR Info Banner */}
+            <div className="p-3.5 sm:p-4 rounded-xl bg-amber-50/70 dark:bg-amber-950/20 border border-amber-200/80 dark:border-amber-800/40 flex flex-wrap sm:flex-nowrap items-center justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-12 h-12 rounded-lg bg-white dark:bg-darkAshram-card p-1 border border-amber-300 shadow-sm flex items-center justify-center shrink-0 overflow-hidden">
+                  {donationSettings?.qrCodeImage ? (
+                    <img src={donationSettings.qrCodeImage} alt="Donation QR" className="w-full h-full object-contain" />
+                  ) : (
+                    <QrCode className="w-7 h-7 text-ashram-saffron" />
+                  )}
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-ashram-charcoal dark:text-darkAshram-text">Public Donation QR</span>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> Live Active
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-ashram-muted dark:text-darkAshram-muted mt-0.5 truncate">
+                    Donors scan this QR code on the live website to donate. UPI ID: <span className="font-semibold text-ashram-saffron">{donationSettings?.upiId || 'vatsalyavatika@upi'}</span>
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowQrModal(true)}
+                className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-ashram-saffron hover:bg-ashram-saffronHover text-white shadow-soft transition-all flex items-center gap-1.5 shrink-0 cursor-pointer"
+              >
+                <QrCode className="w-3.5 h-3.5" />
+                <span>Change QR</span>
+              </button>
             </div>
 
             <div className="overflow-x-auto bg-white dark:bg-darkAshram-card rounded-2xl border border-ashram-border dark:border-darkAshram-border shadow-soft">
@@ -2075,6 +2232,21 @@ export const AdminDashboardPage: React.FC = () => {
                     />
                   </div>
 
+                  {uploadProgress !== null && (
+                    <div className="space-y-1 py-1">
+                      <div className="flex justify-between text-[10px] font-semibold text-ashram-saffron">
+                        <span>Uploading to Cloud...</span>
+                        <span>{uploadProgress}%</span>
+                      </div>
+                      <div className="w-full bg-gray-200 dark:bg-darkAshram-surface rounded-full h-1.5 overflow-hidden">
+                        <div
+                          className="bg-ashram-saffron h-1.5 transition-all duration-300"
+                          style={{ width: `${uploadProgress}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
                   <input
                     type="url"
                     placeholder="Or paste image URL (https://...)"
@@ -2177,7 +2349,7 @@ export const AdminDashboardPage: React.FC = () => {
                     <Upload className="w-4 h-4 text-ashram-saffron shrink-0" />
                     <input
                       type="file"
-                      accept="image/*"
+                      accept="image/*,video/mp4,video/webm"
                       onChange={(e) => {
                         const file = e.target.files?.[0];
                         if (file) handleFileUpload(file, (dataUrl) => setGalleryForm({ ...galleryForm, image: dataUrl }));
@@ -2186,22 +2358,41 @@ export const AdminDashboardPage: React.FC = () => {
                     />
                   </div>
 
+                  {uploadProgress !== null && (
+                    <div className="space-y-1 py-1">
+                      <div className="flex justify-between text-[10px] font-semibold text-ashram-saffron">
+                        <span>Uploading to Cloud...</span>
+                        <span>{uploadProgress}%</span>
+                      </div>
+                      <div className="w-full bg-gray-200 dark:bg-darkAshram-surface rounded-full h-1.5 overflow-hidden">
+                        <div
+                          className="bg-ashram-saffron h-1.5 transition-all duration-300"
+                          style={{ width: `${uploadProgress}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
                   <input
                     type="url"
-                    placeholder="Or paste image URL (https://...)"
+                    placeholder="Or paste image/video URL (https://...)"
                     value={galleryForm.image}
                     onChange={e => setGalleryForm({ ...galleryForm, image: e.target.value })}
                     className="w-full p-2.5 rounded-xl border border-ashram-border dark:border-darkAshram-border bg-ashram-cream dark:bg-darkAshram-surface text-ashram-charcoal dark:text-darkAshram-text text-xs focus:outline-none focus:border-ashram-saffron"
                   />
                 </div>
 
-                {galleryForm.image && (
+                {galleryForm.image && (galleryForm.image.includes('.mp4') || galleryForm.image.includes('video')) ? (
+                  <div className="rounded-xl overflow-hidden mt-2 bg-black/90 p-1 border border-ashram-border">
+                    <video src={galleryForm.image} controls className="max-h-48 w-full object-contain rounded-lg" />
+                  </div>
+                ) : galleryForm.image ? (
                   <FocalPointPicker
                     imageUrl={galleryForm.image}
                     focalPoint={galleryForm.focalPoint}
                     onChange={(point) => setGalleryForm({ ...galleryForm, focalPoint: point })}
                   />
-                )}
+                ) : null}
               </div>
 
               {/* CATEGORY SELECTOR WITH CRISP HIGH-CONTRAST OPTION STYLING */}
@@ -2357,6 +2548,22 @@ export const AdminDashboardPage: React.FC = () => {
                       }}
                     />
                   </label>
+
+                  {uploadProgress !== null && (
+                    <div className="space-y-1 py-1">
+                      <div className="flex justify-between text-[10px] font-semibold text-ashram-saffron">
+                        <span>Uploading to Cloud...</span>
+                        <span>{uploadProgress}%</span>
+                      </div>
+                      <div className="w-full bg-gray-200 dark:bg-darkAshram-surface rounded-full h-1.5 overflow-hidden">
+                        <div
+                          className="bg-ashram-saffron h-1.5 transition-all duration-300"
+                          style={{ width: `${uploadProgress}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
                   <div className="flex items-center gap-2">
                     <div className="flex-1 h-px bg-ashram-border dark:bg-darkAshram-border" />
                     <span className="text-[10px] text-ashram-muted uppercase font-bold">or URL</span>
@@ -2471,6 +2678,22 @@ export const AdminDashboardPage: React.FC = () => {
                       }}
                     />
                   </label>
+
+                  {uploadProgress !== null && (
+                    <div className="space-y-1 py-1">
+                      <div className="flex justify-between text-[10px] font-semibold text-ashram-saffron">
+                        <span>Uploading to Cloud...</span>
+                        <span>{uploadProgress}%</span>
+                      </div>
+                      <div className="w-full bg-gray-200 dark:bg-darkAshram-surface rounded-full h-1.5 overflow-hidden">
+                        <div
+                          className="bg-ashram-saffron h-1.5 transition-all duration-300"
+                          style={{ width: `${uploadProgress}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
                   <div className="flex items-center gap-2">
                     <div className="flex-1 h-px bg-ashram-border dark:bg-darkAshram-border" />
                     <span className="text-[10px] text-ashram-muted uppercase font-bold">or URL</span>
@@ -2521,6 +2744,185 @@ export const AdminDashboardPage: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── DEDICATED CHANGE QR CODE MODAL ── */}
+      {showQrModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fadeIn">
+          <div className="w-full max-w-lg bg-white dark:bg-darkAshram-card text-ashram-charcoal dark:text-darkAshram-text rounded-2xl shadow-2xl border border-ashram-border dark:border-darkAshram-border max-h-[92vh] overflow-y-auto p-5 sm:p-6">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between pb-4 border-b border-ashram-border dark:border-darkAshram-border">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-amber-500/15 text-ashram-saffron flex items-center justify-center">
+                  <QrCode className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-heading font-bold text-lg text-ashram-green dark:text-darkAshram-gold">
+                    Change Donation QR Code
+                  </h3>
+                  <p className="text-[11px] text-ashram-muted dark:text-darkAshram-muted">
+                    Updates live in the "Scan & Donate" modal across the website
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowQrModal(false)}
+                className="p-1.5 rounded-lg hover:bg-ashram-border/50 dark:hover:bg-darkAshram-border text-ashram-muted hover:text-ashram-charcoal"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="py-4 space-y-5">
+              {/* Current Active QR Preview */}
+              <div className="p-4 rounded-xl bg-ashram-cream/40 dark:bg-darkAshram-surface/40 border border-ashram-border dark:border-darkAshram-border flex items-center gap-4">
+                <div className="w-24 h-24 rounded-lg bg-white p-1.5 border border-ashram-border shrink-0 flex items-center justify-center overflow-hidden">
+                  {donationSettings?.qrCodeImage ? (
+                    <img src={donationSettings.qrCodeImage} alt="Current QR" className="w-full h-full object-contain" />
+                  ) : (
+                    <QrCode className="w-12 h-12 text-ashram-muted" />
+                  )}
+                </div>
+                <div className="min-w-0 flex-1 space-y-1">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 px-2 py-0.5 rounded-full border border-emerald-300 dark:border-emerald-800">
+                    Live Active
+                  </span>
+                  <p className="text-xs font-semibold text-ashram-charcoal dark:text-darkAshram-text truncate">
+                    UPI: {donationSettings?.upiId || 'vatsalyavatika@upi'}
+                  </p>
+                  <p className="text-[11px] text-ashram-muted truncate">
+                    Bank: {donationSettings?.bankName || 'Ashram Trust'}
+                  </p>
+                  {donationSettings?.qrCodeImage && (
+                    <div className="flex items-center gap-3 pt-1">
+                      <a
+                        href={donationSettings.qrCodeImage}
+                        download="donation-qr.jpg"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-[10px] font-bold text-ashram-saffron hover:underline flex items-center gap-1"
+                      >
+                        <Download className="w-3 h-3" /> Download
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(donationSettings.qrCodeImage || '');
+                          toast.success('QR Code URL copied!');
+                        }}
+                        className="text-[10px] font-semibold text-ashram-muted hover:text-ashram-charcoal flex items-center gap-1 cursor-pointer"
+                      >
+                        <Copy className="w-3 h-3" /> Copy URL
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Upload New QR File */}
+              <div>
+                <label className="block text-xs font-bold text-ashram-charcoal dark:text-darkAshram-text mb-1.5">
+                  1. Upload New QR Code Image (from Phone or Computer)
+                </label>
+                <input
+                  ref={modalQrFileInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/jpg,image/webp"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      processQrCodeFile(file);
+                    }
+                    e.target.value = '';
+                  }}
+                  className="hidden"
+                />
+
+                <div
+                  onClick={() => modalQrFileInputRef.current?.click()}
+                  onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const file = e.dataTransfer.files?.[0];
+                    if (file) processQrCodeFile(file);
+                  }}
+                  className="border-2 border-dashed border-amber-400/60 dark:border-amber-600/60 hover:border-ashram-saffron rounded-xl p-5 text-center cursor-pointer transition-all bg-amber-50/30 hover:bg-amber-50/60 dark:bg-amber-950/10 dark:hover:bg-amber-950/20 group"
+                >
+                  <div className="flex flex-col items-center justify-center space-y-2">
+                    <div className="w-10 h-10 rounded-xl bg-ashram-saffron/10 text-ashram-saffron flex items-center justify-center group-hover:scale-110 transition-transform">
+                      <Upload className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-ashram-charcoal dark:text-darkAshram-text">
+                        Click to select QR file or drag & drop here
+                      </p>
+                      <p className="text-[10px] text-ashram-muted mt-0.5">
+                        PNG, JPG, JPEG, WebP • Auto saved to Cloud & Live Site
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Or Paste Image URL */}
+              <div>
+                <label className="block text-xs font-bold text-ashram-charcoal dark:text-darkAshram-text mb-1.5">
+                  2. Or Paste Image URL directly
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="url"
+                    placeholder="https://example.com/qr-code.png"
+                    value={qrUrlInput}
+                    onChange={(e) => setQrUrlInput(e.target.value)}
+                    className="flex-1 px-3 py-2 rounded-xl border border-ashram-border dark:border-darkAshram-border bg-ashram-cream/50 dark:bg-darkAshram-surface text-xs focus:border-ashram-saffron focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleSaveQrUrl(qrUrlInput)}
+                    className="px-3.5 py-2 rounded-xl text-xs font-bold bg-ashram-saffron hover:bg-ashram-saffronHover text-white shadow-soft transition-all shrink-0 cursor-pointer"
+                  >
+                    Save URL
+                  </button>
+                </div>
+              </div>
+
+              {uploadProgress !== null && (
+                <div className="space-y-1 py-1">
+                  <div className="flex justify-between text-[10px] font-semibold text-ashram-saffron">
+                    <span>Uploading & saving QR Code...</span>
+                    <span>{uploadProgress}%</span>
+                  </div>
+                  <div className="w-full bg-gray-200 dark:bg-darkAshram-surface rounded-full h-1.5 overflow-hidden">
+                    <div className="bg-ashram-saffron h-1.5 transition-all duration-300" style={{ width: `${uploadProgress}%` }} />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="pt-4 border-t border-ashram-border dark:border-darkAshram-border flex items-center justify-between">
+              <button
+                type="button"
+                onClick={handleRemoveQr}
+                className="text-xs font-semibold text-rose-600 dark:text-rose-400 hover:underline flex items-center gap-1 cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Reset to Default</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowQrModal(false)}
+                className="px-4 py-2 rounded-xl bg-ashram-saffron hover:bg-ashram-saffronHover text-white text-xs font-bold shadow cursor-pointer"
+              >
+                Done
+              </button>
+            </div>
           </div>
         </div>
       )}
