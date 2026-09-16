@@ -13,9 +13,10 @@ dist-ssr/
 build/
 **/build/
 .vercel/
-out/
-
-
+# Environment Variables
+.env
+.env*.local
+*.env
 
 # OS & Editor Files
 .DS_Store
