@@ -730,18 +730,19 @@ export const AdminDashboardPage: React.FC = () => {
 
       {/* Top Admin Header */}
       <header className="bg-white dark:bg-darkAshram-card border-b border-ashram-border dark:border-darkAshram-border sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-2.5 sm:px-6 lg:px-8 py-2.5 sm:py-4 flex items-center justify-between gap-1.5 sm:gap-2">
-          <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1 sm:flex-initial">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-2.5 sm:py-3.5 flex items-center justify-between gap-2">
+          {/* Left: Brand Identity & Status */}
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             <div className="relative w-8 h-8 sm:w-10 sm:h-10 rounded-full border-[1.5px] border-amber-400/80 bg-slate-900 flex items-center justify-center text-amber-400 shadow-[0_0_12px_rgba(251,191,36,0.6),inset_0_0_8px_rgba(251,191,36,0.4)] shrink-0">
               <span className="text-xl sm:text-2xl font-bold drop-shadow-[0_0_8px_rgba(251,191,36,1)] leading-none mt-0.5 select-none">ॐ</span>
             </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
+            <div className="min-w-0 flex flex-col">
+              <div className="flex items-center gap-1.5 flex-wrap">
                 <h1 className="font-heading font-bold text-xs sm:text-base lg:text-xl text-ashram-green dark:text-darkAshram-gold leading-tight truncate">
-                  <span className="hidden sm:inline">Vatsalya Vatika </span>Admin Dashboard
+                  <span className="hidden sm:inline">Vatsalya Vatika </span>Admin<span className="hidden md:inline"> Dashboard</span>
                 </h1>
                 <div
-                  className={`inline-flex items-center gap-1 sm:gap-1.5 px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-semibold border transition-all ${
+                  className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] sm:text-xs font-semibold border transition-all shrink-0 ${
                     dbStatus === 'connected'
                       ? 'bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800'
                       : 'bg-amber-50 text-amber-700 border-amber-300 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-800'
@@ -759,51 +760,54 @@ export const AdminDashboardPage: React.FC = () => {
                         : 'bg-amber-500'
                     }`}
                   />
-                  <span>
+                  <span className="whitespace-nowrap">
                     {dbStatus === 'connected'
-                      ? 'Firebase Live Sync'
-                      : 'Local Live Sync'}
+                      ? 'Live Sync'
+                      : 'Local Sync'}
                   </span>
                 </div>
               </div>
               <p className="text-[10px] sm:text-xs text-ashram-muted dark:text-darkAshram-muted truncate">
-                Welcome, {user?.name || 'Administrator'}
+                Welcome, {user?.name || 'Guruji'}
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
+          {/* Right: Actions */}
+          <div className="flex items-center gap-1 sm:gap-2.5 shrink-0">
 
             {/* Direct Quick Action: Change QR Code */}
             <button
               onClick={() => setShowQrModal(true)}
-              className="inline-flex items-center gap-1 sm:gap-1.5 px-2.5 py-1.5 sm:px-3.5 sm:py-2 rounded-xl text-[11px] sm:text-xs font-bold bg-amber-500/15 hover:bg-amber-500/25 text-amber-800 dark:text-amber-200 border border-amber-300/70 dark:border-amber-700/60 transition-all shadow-sm shrink-0 cursor-pointer active:scale-95"
+              className="inline-flex items-center gap-1 px-2 py-1.5 sm:px-3 sm:py-2 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-bold bg-amber-500/15 hover:bg-amber-500/25 text-amber-800 dark:text-amber-200 border border-amber-300/70 dark:border-amber-700/60 transition-all shadow-sm shrink-0 cursor-pointer active:scale-95"
               title="Change Donation QR Code"
             >
               <QrCode className="w-3.5 h-3.5 text-ashram-saffron shrink-0" />
-              <span>Change QR</span>
+              <span className="hidden sm:inline">Change QR</span>
+              <span className="sm:hidden">QR</span>
             </button>
 
             <Link
               to="/"
-              className="inline-flex items-center gap-1 sm:gap-1.5 px-2.5 py-1.5 sm:px-3.5 sm:py-2 rounded-xl text-[11px] sm:text-xs font-semibold bg-ashram-cream dark:bg-darkAshram-surface border border-ashram-border dark:border-darkAshram-border hover:bg-ashram-border/50 dark:hover:bg-darkAshram-border/50 text-ashram-charcoal dark:text-darkAshram-text transition-colors shadow-sm shrink-0 whitespace-nowrap"
+              className="inline-flex items-center gap-1 px-2 py-1.5 sm:px-3 sm:py-2 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-semibold bg-ashram-cream dark:bg-darkAshram-surface border border-ashram-border dark:border-darkAshram-border hover:bg-ashram-border/50 dark:hover:bg-darkAshram-border/50 text-ashram-charcoal dark:text-darkAshram-text transition-colors shadow-sm shrink-0 whitespace-nowrap"
               title="Visit Live Website"
             >
-              <span>Live Website</span>
-              <ExternalLink className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
+              <span className="hidden sm:inline">Live Website</span>
+              <span className="sm:hidden">Live</span>
+              <ExternalLink className="w-3 h-3 shrink-0" />
             </Link>
 
             {/* Dark / Light Mode Toggle Button for Admin Dashboard */}
             <button
               onClick={toggleTheme}
               aria-label="Toggle theme"
-              className="w-7 h-7 sm:w-9 sm:h-9 rounded-full border border-ashram-border dark:border-darkAshram-border bg-ashram-cream dark:bg-darkAshram-surface text-ashram-charcoal dark:text-darkAshram-gold hover:bg-ashram-saffron/10 dark:hover:bg-darkAshram-gold/20 flex items-center justify-center transition-all transform hover:scale-105 shadow-sm shrink-0"
+              className="w-7 h-7 sm:w-8 sm:h-8 rounded-full border border-ashram-border dark:border-darkAshram-border bg-ashram-cream dark:bg-darkAshram-surface text-ashram-charcoal dark:text-darkAshram-gold hover:bg-ashram-saffron/10 dark:hover:bg-darkAshram-gold/20 flex items-center justify-center transition-all shadow-sm shrink-0"
               title={theme === 'light' ? 'Switch Admin to Dark Mode' : 'Switch Admin to Light Mode'}
             >
               {theme === 'light' ? (
-                <Sun className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-ashram-saffron theme-btn-icon" />
+                <Sun className="w-3.5 h-3.5 text-ashram-saffron theme-btn-icon" />
               ) : (
-                <Moon className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-darkAshram-gold theme-btn-icon" />
+                <Moon className="w-3.5 h-3.5 text-darkAshram-gold theme-btn-icon" />
               )}
             </button>
 
@@ -813,11 +817,11 @@ export const AdminDashboardPage: React.FC = () => {
                 toast.success('Logged out');
                 navigate('/');
               }}
-              className="inline-flex items-center gap-1 sm:gap-1.5 px-2.5 py-1.5 sm:px-3.5 sm:py-2 rounded-xl text-[11px] sm:text-xs font-semibold bg-red-50 text-red-600 dark:bg-red-950/40 dark:text-red-400 border border-red-200 dark:border-red-900/50 hover:bg-red-100 dark:hover:bg-red-900/40 shadow-sm shrink-0"
+              className="inline-flex items-center gap-1 px-2 py-1.5 sm:px-3 sm:py-2 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-semibold bg-red-50 text-red-600 dark:bg-red-950/40 dark:text-red-400 border border-red-200 dark:border-red-900/50 hover:bg-red-100 dark:hover:bg-red-900/40 shadow-sm shrink-0"
               title="Logout of Admin Portal"
             >
               <LogOut className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
-              <span>Logout</span>
+              <span className="hidden sm:inline">Logout</span>
             </button>
           </div>
         </div>
