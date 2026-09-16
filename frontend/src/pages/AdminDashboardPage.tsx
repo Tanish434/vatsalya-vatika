@@ -1939,12 +1939,6 @@ export const AdminDashboardPage: React.FC = () => {
                       <input type="url" value={siteSettings.instagramUrl} onChange={e => setSiteSettings({ ...siteSettings, instagramUrl: e.target.value })} className="w-full p-2.5 rounded-xl border border-ashram-border dark:border-darkAshram-border bg-ashram-cream dark:bg-darkAshram-surface focus:outline-none focus:border-ashram-saffron" />
                     </div>
                   </div>
-                  <div className="flex items-center">
-                    <label className="flex items-center gap-3 cursor-pointer p-4 border border-ashram-border dark:border-darkAshram-border rounded-xl w-full hover:bg-ashram-cream dark:hover:bg-darkAshram-surface transition-colors">
-                      <input type="checkbox" checked={siteSettings.showDonors} onChange={e => setSiteSettings({ ...siteSettings, showDonors: e.target.checked })} className="w-5 h-5 accent-ashram-saffron rounded" />
-                      <span className="font-semibold text-ashram-charcoal dark:text-darkAshram-text">Show Top Contributors on Homepage</span>
-                    </label>
-                  </div>
                 </div>
               </div>
 

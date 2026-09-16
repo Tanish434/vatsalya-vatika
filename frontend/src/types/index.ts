@@ -81,7 +81,7 @@ export interface SiteSettingsData {
   facebookUrl: string;
   youtubeUrl: string;
   instagramUrl: string;
-  showDonors: boolean;
+  showDonors?: boolean;
 }
 
 export interface ReviewItem {

@@ -11,7 +11,6 @@ import { EventsSection } from '../components/EventsSection';
 import { GalleryLightbox } from '../components/GalleryLightbox';
 import { ContributeModal } from '../components/ContributeModal';
 import { ContactSection } from '../components/ContactSection';
-import { TopContributors } from '../components/TopContributors';
 import { ReviewsSection } from '../components/ReviewsSection';
 import { Footer } from '../components/Footer';
 
@@ -70,10 +69,7 @@ export const HomePage: React.FC = () => {
           </div>
         </section>
 
-        {/* 10. Top Contributors */}
-        <TopContributors />
-
-        {/* 11. Contact Section */}
+        {/* 10. Contact Section */}
         <ContactSection />
 
         {/* 12. About Section */}
