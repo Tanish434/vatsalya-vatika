@@ -20,12 +20,22 @@ const EventCard: React.FC<{ evt: EventItem; onClick: () => void; idx: number; vi
       style={{ transitionDelay: `${idx * 100}ms` }}
     >
       {/* Image Container */}
-      <div className="relative h-52 overflow-hidden bg-slate-900 dark:bg-black isolate -mb-px">
+      <div
+        className="relative h-52 overflow-hidden bg-slate-900 dark:bg-black select-none"
+        style={{ fontSize: 0, lineHeight: 0, display: 'flex', transform: 'translateZ(0)' }}
+      >
         <img
           src={evt.image}
           alt={evt.title}
-          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 block select-none"
-          style={{ objectPosition: evt.focalPoint ? `${evt.focalPoint.x}% ${evt.focalPoint.y}%` : 'top center' }}
+          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+          style={{
+            objectPosition: evt.focalPoint ? `${evt.focalPoint.x}% ${evt.focalPoint.y}%` : 'top center',
+            display: 'block',
+            border: 'none',
+            outline: 'none',
+            willChange: 'transform',
+            transform: 'translateZ(0)',
+          }}
         />
         {/* Gradient overlay */}
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent pointer-events-none" />
@@ -167,14 +177,24 @@ export const EventsSection: React.FC = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-fadeIn">
           <div className="relative w-full max-w-xl bg-white dark:bg-darkAshram-card rounded-3xl shadow-2xl border border-ashram-border dark:border-darkAshram-border max-h-[90vh] overflow-y-auto">
             {/* Modal image */}
-            <div className="relative h-52 rounded-t-3xl overflow-hidden bg-slate-900 dark:bg-black isolate -mb-px">
+            <div
+              className="relative h-52 rounded-t-3xl overflow-hidden bg-slate-900 dark:bg-black select-none"
+              style={{ fontSize: 0, lineHeight: 0, display: 'flex', transform: 'translateZ(0)' }}
+            >
               <img
                 src={selectedEvent.image}
                 alt={selectedEvent.title}
                 className="w-full h-full object-cover"
-                style={{ objectPosition: selectedEvent.focalPoint ? `${selectedEvent.focalPoint.x}% ${selectedEvent.focalPoint.y}%` : 'top center' }}
+                style={{
+                  objectPosition: selectedEvent.focalPoint ? `${selectedEvent.focalPoint.x}% ${selectedEvent.focalPoint.y}%` : 'top center',
+                  display: 'block',
+                  border: 'none',
+                  outline: 'none',
+                  willChange: 'transform',
+                  transform: 'translateZ(0)',
+                }}
               />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent pointer-events-none" />
               <button
                 onClick={() => setSelectedEvent(null)}
                 className="absolute top-3 right-3 p-2 rounded-full bg-black/40 hover:bg-black/60 text-white transition-colors backdrop-blur-sm"
