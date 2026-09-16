@@ -19,16 +19,16 @@ const EventCard: React.FC<{ evt: EventItem; onClick: () => void; idx: number; vi
       className={`group relative bg-white dark:bg-darkAshram-card rounded-3xl overflow-hidden border border-ashram-border/60 dark:border-darkAshram-border/60 shadow-lg hover:shadow-2xl dark:hover:shadow-dark-xl cursor-pointer flex flex-col transition-all duration-500 hover:-translate-y-2 ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}
       style={{ transitionDelay: `${idx * 100}ms` }}
     >
-      {/* Image */}
-      <div className="relative h-52 overflow-hidden bg-slate-900 dark:bg-black">
+      {/* Image Container */}
+      <div className="relative h-52 overflow-hidden bg-slate-900 dark:bg-black isolate -mb-px">
         <img
           src={evt.image}
           alt={evt.title}
-          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 block"
+          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 block select-none"
           style={{ objectPosition: evt.focalPoint ? `${evt.focalPoint.x}% ${evt.focalPoint.y}%` : 'top center' }}
         />
         {/* Gradient overlay */}
-        <div className="absolute -inset-0.5 bg-gradient-to-t from-black/75 via-black/15 to-transparent pointer-events-none" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent pointer-events-none" />
 
         {/* Category pill */}
         <div className={`absolute top-3 left-3 inline-flex items-center gap-1 px-3 py-1 rounded-full bg-gradient-to-r ${grad} text-white text-[10px] font-bold shadow-lg backdrop-blur-sm`}>
@@ -167,7 +167,7 @@ export const EventsSection: React.FC = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-fadeIn">
           <div className="relative w-full max-w-xl bg-white dark:bg-darkAshram-card rounded-3xl shadow-2xl border border-ashram-border dark:border-darkAshram-border max-h-[90vh] overflow-y-auto">
             {/* Modal image */}
-            <div className="relative h-52 rounded-t-3xl overflow-hidden">
+            <div className="relative h-52 rounded-t-3xl overflow-hidden bg-slate-900 dark:bg-black isolate -mb-px">
               <img
                 src={selectedEvent.image}
                 alt={selectedEvent.title}
