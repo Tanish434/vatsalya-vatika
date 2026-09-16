@@ -1,59 +1,62 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
   <defs>
-    <!-- Background Radial Gradient -->
-    <radialGradient id="bgGrad" cx="50%" cy="50%" r="50%">
-      <stop offset="0%" stop-color="#24190c"/>
-      <stop offset="60%" stop-color="#14100b"/>
-      <stop offset="100%" stop-color="#0a0806"/>
+    <!-- Dark background radial gradient -->
+    <radialGradient id="bgG" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"   stop-color="#2a1a08"/>
+      <stop offset="70%"  stop-color="#140e06"/>
+      <stop offset="100%" stop-color="#0a0804"/>
     </radialGradient>
 
-    <!-- Golden Ring & Symbol Linear Gradient -->
-    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#FFF5C2"/>
-      <stop offset="25%" stop-color="#FCD34D"/>
-      <stop offset="50%" stop-color="#F59E0B"/>
-      <stop offset="80%" stop-color="#D97706"/>
-      <stop offset="100%" stop-color="#92400E"/>
+    <!-- Gold gradient for ring and Om -->
+    <linearGradient id="goldG" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%"   stop-color="#FFF8D6"/>
+      <stop offset="20%"  stop-color="#FFD966"/>
+      <stop offset="50%"  stop-color="#F59E0B"/>
+      <stop offset="80%"  stop-color="#B45309"/>
+      <stop offset="100%" stop-color="#78350F"/>
     </linearGradient>
 
-    <!-- Outer Ring Radiant Glow -->
-    <filter id="goldGlow" x="-20%" y="-20%" width="140%" height="140%">
-      <feGaussianBlur stdDeviation="10" result="blur" />
-      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    <!-- Clip circle so Om never bleeds outside -->
+    <clipPath id="circleClip">
+      <circle cx="256" cy="256" r="228"/>
+    </clipPath>
+
+    <!-- Soft ambient glow -->
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="14" result="blur"/>
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
     </filter>
 
-    <!-- Shadow for 3D depth -->
-    <filter id="omShadow" x="-30%" y="-30%" width="160%" height="160%">
-      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#000000" flood-opacity="0.75" />
-      <feDropShadow dx="0" dy="0" stdDeviation="18" flood-color="#F59E0B" flood-opacity="0.35" />
+    <!-- Text drop-shadow for 3-D feel -->
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="4" stdDeviation="8"  flood-color="#000" flood-opacity="0.8"/>
+      <feDropShadow dx="0" dy="0" stdDeviation="16" flood-color="#F59E0B" flood-opacity="0.4"/>
     </filter>
   </defs>
 
-  <!-- Circular Base Layer -->
-  <circle cx="256" cy="256" r="250" fill="url(#bgGrad)" />
+  <!-- ── Solid circular base ── -->
+  <circle cx="256" cy="256" r="250" fill="url(#bgG)"/>
 
-  <!-- Outer Radiant Aura -->
-  <circle cx="256" cy="256" r="236" fill="none" stroke="#F59E0B" stroke-width="3" opacity="0.3" filter="url(#goldGlow)" />
+  <!-- ── Outer decorative ring ── -->
+  <circle cx="256" cy="256" r="242" fill="none" stroke="url(#goldG)" stroke-width="10"/>
 
-  <!-- Main Outer Golden Ring -->
-  <circle cx="256" cy="256" r="230" fill="none" stroke="url(#goldGrad)" stroke-width="12" />
+  <!-- ── Subtle inner ring filigree ── -->
+  <circle cx="256" cy="256" r="228" fill="none" stroke="url(#goldG)" stroke-width="2.5" opacity="0.7" stroke-dasharray="10 5"/>
 
-  <!-- Inner Thin Golden Filigree Ring -->
-  <circle cx="256" cy="256" r="214" fill="none" stroke="url(#goldGrad)" stroke-width="3" opacity="0.85" stroke-dasharray="8 4" />
-  <circle cx="256" cy="256" r="202" fill="none" stroke="url(#goldGrad)" stroke-width="2" opacity="0.6" />
+  <!-- ── Ambient glow circle ── -->
+  <circle cx="256" cy="256" r="242" fill="none" stroke="#F59E0B" stroke-width="6" opacity="0.2" filter="url(#glow)"/>
 
-  <!-- Golden Om (ॐ) Sacred Symbol -->
-  <g filter="url(#omShadow)" transform="translate(0, 10)">
-    <text 
-      x="256" 
-      y="335" 
-      font-family="'Noto Sans Devanagari', 'Nirmala UI', 'Yatra One', 'Segoe UI', sans-serif" 
-      font-size="270" 
-      font-weight="900" 
-      fill="url(#goldGrad)" 
-      stroke="#78350F"
-      stroke-width="2"
+  <!-- ── Om symbol — clipped inside circle, perfectly centered ── -->
+  <g clip-path="url(#circleClip)" filter="url(#shadow)">
+    <text
+      x="256"
+      y="310"
+      font-family="'Noto Sans Devanagari','Nirmala UI','Mangal','Segoe UI',sans-serif"
+      font-size="220"
+      font-weight="900"
+      fill="url(#goldG)"
       text-anchor="middle"
-      letter-spacing="0">ॐ</text>
+      dominant-baseline="auto"
+    >ॐ</text>
   </g>
 </svg>
