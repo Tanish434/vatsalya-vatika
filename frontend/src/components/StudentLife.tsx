@@ -1,34 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { BookOpen, Trophy, Sprout, ArrowRight, X, Heart, ShieldCheck } from 'lucide-react';
 import { studentImageService } from '../services/studentImageService';
-import { StudentImage } from '../types';
+import { fallbackStudentImages } from '../services/fallbackData';
 
-const DEFAULT_PILLARS = [
-  {
-    _id: 'default-1',
-    title: '📚 Education',
-    image: 'https://images.unsplash.com/photo-1509062522246-3755977927d7?auto=format&fit=crop&w=800&q=80',
-    description: 'Formal schooling support, interactive digital science labs, language literacy, homework assistance, and conceptual clarity.',
-    tagline: 'Foundational Knowledge & Skill Building',
-    icon: BookOpen
-  },
-  {
-    _id: 'default-2',
-    title: '⚽ Activities',
-    image: 'https://images.unsplash.com/photo-1461896836934-ffe607ba8211?auto=format&fit=crop&w=800&q=80',
-    description: 'Daily outdoor sports tournaments, athletics, yoga sessions, classical music, drama, and artistic creative workshops.',
-    tagline: 'Sports, Culture & Physical Wellbeing',
-    icon: Trophy
-  },
-  {
-    _id: 'default-3',
-    title: '🌱 Personal Growth',
-    image: 'https://images.unsplash.com/photo-1506126613408-eca07ce68773?auto=format&fit=crop&w=800&q=80',
-    description: 'Value-based life lessons, emotional care, leadership qualities, environmental responsibility, and spiritual mindfulness.',
-    tagline: 'Character, Discipline & Moral Guidance',
-    icon: Sprout
-  }
-];
+const DEFAULT_PILLARS = fallbackStudentImages.map((item, idx) => ({
+  ...item,
+  tagline: idx === 0 ? 'Foundational Knowledge & Skill Building' : idx === 1 ? 'Sports, Culture & Physical Wellbeing' : 'Character, Discipline & Moral Guidance',
+  icon: idx === 0 ? BookOpen : idx === 1 ? Trophy : Sprout
+}));
 
 export const StudentLife: React.FC = () => {
   const [showStudentLifeModal, setShowStudentLifeModal] = useState(false);

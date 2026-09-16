@@ -132,7 +132,7 @@ export const PremiumImageShowcase: React.FC = () => {
                   alt={item.title || "Spiritual Gallery Image"}
                   loading="lazy"
                   onError={(e) => {
-                    (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1544717305-2782549b5136?auto=format&fit=crop&w=1200&q=80';
+                    (e.target as HTMLImageElement).src = '/om1.png';
                   }}
                   className="w-full h-full object-cover transition-all duration-[1500ms] ease-out opacity-90 group-hover/card:opacity-100 group-hover/card:scale-105"
                 />
