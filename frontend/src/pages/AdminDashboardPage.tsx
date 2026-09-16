@@ -36,7 +36,7 @@ import {
   Sun,
   Moon,
   Settings,
-  Star,
+  MessageSquare,
   Bell,
   CheckCheck,
   Filter,
@@ -893,7 +893,7 @@ export const AdminDashboardPage: React.FC = () => {
                 { id: 'messages', label: 'Messages', icon: Mail, badge: contacts.filter(c => c.status === 'new').length > 0 ? contacts.filter(c => c.status === 'new').length : undefined },
                 { id: 'contributions', label: 'Donations', icon: Heart },
                 { id: 'donation_settings', label: 'Donation & QR Code', icon: QrCode },
-                { id: 'reviews', label: 'Reviews', icon: Star },
+                { id: 'reviews', label: 'Reviews', icon: MessageSquare },
                 { id: 'users', label: 'Users', icon: Users },
                 { id: 'settings', label: 'Site Settings', icon: Settings },
                 { id: 'our_students', label: 'Our Students', icon: GraduationCap },
@@ -1963,7 +1963,7 @@ export const AdminDashboardPage: React.FC = () => {
               </h3>
               {reviews.length > 0 && (
                 <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/40">
-                  <Star className="w-4 h-4 fill-amber-400 text-amber-400" />
+                  <span className="text-amber-400 text-lg leading-none">★</span>
                   <span className="text-sm font-bold text-amber-600 dark:text-amber-400">
                     {(reviews.reduce((s, r) => s + r.rating, 0) / reviews.length).toFixed(1)} avg
                   </span>
@@ -1972,7 +1972,7 @@ export const AdminDashboardPage: React.FC = () => {
             </div>
             {reviews.length === 0 ? (
               <div className="p-12 rounded-2xl bg-white dark:bg-darkAshram-card border border-ashram-border dark:border-darkAshram-border text-center">
-                <Star className="w-10 h-10 text-ashram-muted mx-auto mb-3" />
+                <span className="text-5xl text-ashram-muted mx-auto mb-3 block text-center">★</span>
                 <p className="text-sm text-ashram-muted">No reviews yet.</p>
               </div>
             ) : (
@@ -1998,7 +1998,7 @@ export const AdminDashboardPage: React.FC = () => {
                         <td className="p-4">
                           <div className="flex gap-0.5">
                             {[1, 2, 3, 4, 5].map(i => (
-                              <Star key={i} className={`w-3.5 h-3.5 ${i <= rev.rating ? 'fill-amber-400 text-amber-400' : 'text-gray-300 dark:text-gray-600'}`} />
+                              <span key={i} className={`text-sm leading-none ${i <= rev.rating ? 'text-amber-400' : 'text-gray-300 dark:text-gray-600'}`}>★</span>
                             ))}
                           </div>
                           <span className="text-[10px] font-bold text-amber-500">{rev.rating}/5</span>

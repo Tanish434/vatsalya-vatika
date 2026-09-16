@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Heart, Trophy, Medal, Star, Award, Sparkles } from 'lucide-react';
+import { Heart, Trophy, Medal, Award, Sparkles } from 'lucide-react';
 import { contributionService } from '../services/contributionService';
 import { siteSettingsService } from '../services/siteSettingsService';
 import { ContributionRecord } from '../types';
@@ -116,15 +116,6 @@ const DonorCard: React.FC<{ donor: ContributionRecord; rank: number; visible: bo
       <span className="mt-2 text-[10px] px-3 py-1 rounded-full bg-white/70 dark:bg-darkAshram-surface/60 text-ashram-muted dark:text-darkAshram-muted border border-ashram-border/50 dark:border-darkAshram-border/50 font-medium">
         {donor.purpose}
       </span>
-
-      {/* Stars for top 3 */}
-      {rank < 3 && (
-        <div className="flex gap-0.5 mt-3">
-          {Array.from({ length: 3 - rank }).map((_, i) => (
-            <Star key={i} className="w-3.5 h-3.5 fill-amber-400 text-amber-400 drop-shadow-[0_0_4px_rgba(251,191,36,0.5)]" />
-          ))}
-        </div>
-      )}
     </div>
   );
 };

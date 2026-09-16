@@ -1,29 +1,37 @@
 {
-  "name": "Vatsalya Vatika",
-  "short_name": "Vatika",
+  "name": "Vatsalya Vatika Ashram",
+  "short_name": "Vatsalya Vatika",
+  "description": "Vatsalya Vatika Ashram Kurukshetra - Education, Care & Values for Underprivileged Children",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0a0806",
+  "theme_color": "#D96B27",
   "icons": [
     {
-      "src": "/favicon-16x16.png",
-      "sizes": "16x16",
-      "type": "image/png"
+      "src": "/om-icon.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
     },
     {
-      "src": "/favicon-32x32.png",
-      "sizes": "32x32",
-      "type": "image/png"
+      "src": "/om-icon.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
     },
     {
-      "src": "/favicon-48x48.png",
-      "sizes": "48x48",
-      "type": "image/png"
+      "src": "/om-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
     },
     {
-      "src": "/apple-touch-icon.png",
-      "sizes": "180x180",
-      "type": "image/png"
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
     }
-  ],
-  "theme_color": "#D96B27",
-  "background_color": "#FDFBF7",
-  "display": "standalone"
+  ]
 }

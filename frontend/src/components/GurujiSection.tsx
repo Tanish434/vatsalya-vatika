@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Quote, ArrowRight, X, Compass, BookOpen, Heart, Star, FileText } from 'lucide-react';
+import { Quote, ArrowRight, X, Compass, BookOpen, Heart, Sun, FileText } from 'lucide-react';
 
 const PILLARS = [
   { icon: BookOpen, label: 'Vidya', desc: 'Knowledge & Wisdom' },
   { icon: Heart, label: 'Karuna', desc: 'Compassion & Empathy' },
-  { icon: Star, label: 'Karma', desc: 'Righteous Action' },
+  { icon: Sun, label: 'Karma', desc: 'Righteous Action' },
 ];
 
 export const GurujiSection: React.FC = () => {

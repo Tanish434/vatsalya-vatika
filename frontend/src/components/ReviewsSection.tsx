@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Star, Send, ChevronLeft, ChevronRight, MessageCircle, Quote, Sparkles, TrendingUp } from 'lucide-react';
+import { Send, ChevronLeft, ChevronRight, MessageCircle, Quote, Sparkles, TrendingUp } from 'lucide-react';
 import { ReviewItem } from '../types';
 import { reviewService } from '../services/reviewService';
 import toast from 'react-hot-toast';
@@ -35,13 +35,13 @@ const StarInput: React.FC<{ value: number; onChange: (v: number) => void }> = ({
             className="focus:outline-none transition-all duration-150 transform hover:scale-125 active:scale-110"
             aria-label={`Rate ${i} star${i !== 1 ? 's' : ''}`}
           >
-            <Star
-              className={`w-8 h-8 transition-all duration-150 ${
+            <span
+              className={`text-3xl leading-none transition-all duration-150 ${
                 (hovered || value) >= i
-                  ? 'fill-amber-400 text-amber-400 drop-shadow-[0_0_8px_rgba(251,191,36,0.6)]'
+                  ? 'text-amber-400 drop-shadow-[0_0_8px_rgba(251,191,36,0.6)]'
                   : 'text-gray-200 dark:text-gray-700 hover:text-amber-300'
               }`}
-            />
+            >★</span>
           </button>
         ))}
       </div>
@@ -58,14 +58,14 @@ const StarInput: React.FC<{ value: number; onChange: (v: number) => void }> = ({
 const StarDisplay: React.FC<{ rating: number; size?: string }> = ({ rating, size = 'w-4 h-4' }) => (
   <div className="flex gap-0.5">
     {[1, 2, 3, 4, 5].map(i => (
-      <Star
+      <span
         key={i}
-        className={`${size} ${
+        className={`text-sm leading-none ${
           i <= rating
-            ? 'fill-amber-400 text-amber-400 drop-shadow-[0_1px_4px_rgba(251,191,36,0.4)]'
+            ? 'text-amber-400 drop-shadow-[0_1px_4px_rgba(251,191,36,0.4)]'
             : 'text-gray-200 dark:text-gray-700'
         }`}
-      />
+      >★</span>
     ))}
   </div>
 );
