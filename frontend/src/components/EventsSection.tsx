@@ -20,15 +20,15 @@ const EventCard: React.FC<{ evt: EventItem; onClick: () => void; idx: number; vi
       style={{ transitionDelay: `${idx * 100}ms` }}
     >
       {/* Image */}
-      <div className="relative h-52 overflow-hidden">
+      <div className="relative h-52 overflow-hidden bg-slate-900 dark:bg-black">
         <img
           src={evt.image}
           alt={evt.title}
-          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 block"
           style={{ objectPosition: evt.focalPoint ? `${evt.focalPoint.x}% ${evt.focalPoint.y}%` : 'top center' }}
         />
         {/* Gradient overlay */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />
+        <div className="absolute -inset-0.5 bg-gradient-to-t from-black/75 via-black/15 to-transparent pointer-events-none" />
 
         {/* Category pill */}
         <div className={`absolute top-3 left-3 inline-flex items-center gap-1 px-3 py-1 rounded-full bg-gradient-to-r ${grad} text-white text-[10px] font-bold shadow-lg backdrop-blur-sm`}>
