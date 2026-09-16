@@ -31,65 +31,56 @@ const setLocalCards = (items: MemoryVaultCard[]) => {
 
 export const memoryVaultService = {
   subscribeToCards: (callback: (cards: MemoryVaultCard[]) => void): (() => void) => {
-    let unsubsFirestore: (() => void) | null = null;
-
-    const notify = () => {
-      callback(getLocalCards());
-    };
-
-    window.addEventListener('vatsalya_memory_vault_updated', notify);
-    notify();
-
     if (isFirebaseConfigured && db) {
       try {
-        unsubsFirestore = onSnapshot(
+        const unsubscribe = onSnapshot(
           collection(db, COLLECTION_NAME),
           (snapshot) => {
-            if (!snapshot.empty) {
-              const items: MemoryVaultCard[] = snapshot.docs.map((docSnap, index) => {
-                const data = docSnap.data();
-                return {
-                  _id: docSnap.id,
-                  title: data.title || '',
-                  image: data.image || '',
-                  description: data.description || '',
-                  category: data.category || 'Memories',
-                  cardNumber: data.cardNumber !== undefined ? data.cardNumber : index + 1,
-                  rotation: data.rotation !== undefined ? data.rotation : 0,
-                  offsetX: data.offsetX !== undefined ? data.offsetX : 0,
-                  offsetY: data.offsetY !== undefined ? data.offsetY : 0,
-                  focalPoint: data.focalPoint || { x: 50, y: 50 },
-                  createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.createdAt || new Date().toISOString()
-                };
-              });
-              setLocalCards(items);
-              callback(items);
+            if (snapshot.empty) {
+              callback(fallbackMemoryVaultCards);
+              return;
             }
+            const items: MemoryVaultCard[] = snapshot.docs.map((docSnap, index) => {
+              const data = docSnap.data();
+              return {
+                _id: docSnap.id,
+                title: data.title || '',
+                image: data.image || '',
+                description: data.description || '',
+                category: data.category || 'Memories',
+                cardNumber: data.cardNumber !== undefined ? data.cardNumber : index + 1,
+                rotation: data.rotation !== undefined ? data.rotation : 0,
+                offsetX: data.offsetX !== undefined ? data.offsetX : 0,
+                offsetY: data.offsetY !== undefined ? data.offsetY : 0,
+                focalPoint: data.focalPoint || { x: 50, y: 50 },
+                createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.createdAt || new Date().toISOString()
+              };
+            });
+            callback(items);
           },
           (err) => {
-            console.warn('Firestore memory vault notice, using local data:', err.message);
+            console.warn('Firestore memory vault subscribe error:', err);
+            callback(getLocalCards());
           }
         );
+        return unsubscribe;
       } catch (err) {
         console.warn('Error subscribing to memory vault:', err);
       }
     }
 
-    return () => {
-      window.removeEventListener('vatsalya_memory_vault_updated', notify);
-      if (unsubsFirestore) unsubsFirestore();
-    };
+    callback(getLocalCards());
+    const handleUpdate = () => callback(getLocalCards());
+    window.addEventListener('vatsalya_memory_vault_updated', handleUpdate);
+    return () => window.removeEventListener('vatsalya_memory_vault_updated', handleUpdate);
   },
 
   getCards: async (): Promise<MemoryVaultCard[]> => {
     if (isFirebaseConfigured && db) {
       try {
-        const snapshot = await Promise.race([
-          getDocs(collection(db, COLLECTION_NAME)),
-          new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 3500))
-        ]);
+        const snapshot = await getDocs(collection(db, COLLECTION_NAME));
         if (!snapshot.empty) {
-          const items = snapshot.docs.map((docSnap, index) => {
+          return snapshot.docs.map((docSnap, index) => {
             const data = docSnap.data();
             return {
               _id: docSnap.id,
@@ -105,18 +96,16 @@ export const memoryVaultService = {
               createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.createdAt || new Date().toISOString()
             };
           });
-          setLocalCards(items);
-          return items;
         }
       } catch (err) {
-        console.warn('Failed to load memory vault from Firestore (using local):', err);
+        console.warn('Failed to load memory vault from Firestore:', err);
       }
     }
     return getLocalCards();
   },
 
   createCard: async (data: Partial<MemoryVaultCard>): Promise<MemoryVaultCard> => {
-    const current = getLocalCards();
+    const current = await memoryVaultService.getCards();
     const newCard = {
       title: data.title || 'Memory Card',
       image: data.image || '',
@@ -129,7 +118,19 @@ export const memoryVaultService = {
       focalPoint: data.focalPoint || { x: 50, y: 50 }
     };
 
-    // 1. Save locally first (instant UI update)
+    if (isFirebaseConfigured && db) {
+      const cleanData = cleanFirestoreData({
+        ...newCard,
+        createdAt: serverTimestamp()
+      });
+      const docRef = await addDoc(collection(db, COLLECTION_NAME), cleanData);
+      return {
+        _id: docRef.id,
+        ...newCard,
+        createdAt: new Date().toISOString()
+      } as MemoryVaultCard;
+    }
+
     const created: MemoryVaultCard = {
       _id: `vault-${Date.now()}`,
       ...newCard,
@@ -137,43 +138,22 @@ export const memoryVaultService = {
     } as MemoryVaultCard;
     setLocalCards([...current, created]);
     window.dispatchEvent(new CustomEvent('vatsalya_memory_vault_updated'));
-
-    // 2. Background sync to Firestore
-    if (isFirebaseConfigured && db) {
-      try {
-        const cleanData = cleanFirestoreData({
-          ...newCard,
-          createdAt: serverTimestamp()
-        });
-        const docRef = await addDoc(collection(db, COLLECTION_NAME), cleanData);
-        created._id = docRef.id;
-      } catch (err: any) {
-        console.warn('Firestore createCard notice:', err.message);
-      }
-    }
-
     return created;
   },
 
   updateCard: async (id: string, data: Partial<MemoryVaultCard>): Promise<MemoryVaultCard> => {
-    // 1. Update locally first
+    if (isFirebaseConfigured && db) {
+      const docRef = doc(db, COLLECTION_NAME, id);
+      const updateData: any = { ...data };
+      delete updateData._id;
+      await updateDoc(docRef, cleanFirestoreData(updateData));
+      return { _id: id, ...data } as MemoryVaultCard;
+    }
+
     const current = getLocalCards();
     const updated = current.map((item) => (item._id === id ? { ...item, ...data } : item));
     setLocalCards(updated);
     window.dispatchEvent(new CustomEvent('vatsalya_memory_vault_updated'));
-
-    // 2. Background sync to Firestore
-    if (isFirebaseConfigured && db) {
-      try {
-        const docRef = doc(db, COLLECTION_NAME, id);
-        const updateData: any = { ...data };
-        delete updateData._id;
-        await updateDoc(docRef, cleanFirestoreData(updateData));
-      } catch (err: any) {
-        console.warn('Firestore updateCard notice:', err.message);
-      }
-    }
-
     return { _id: id, ...data } as MemoryVaultCard;
   },
 
@@ -182,19 +162,14 @@ export const memoryVaultService = {
       deleteMediaFromStorage(mediaUrl).catch(() => {});
     }
 
-    // 1. Delete locally first
+    if (isFirebaseConfigured && db) {
+      await deleteDoc(doc(db, COLLECTION_NAME, id));
+      return;
+    }
+
     const current = getLocalCards();
     const updated = current.filter((item) => item._id !== id);
     setLocalCards(updated);
     window.dispatchEvent(new CustomEvent('vatsalya_memory_vault_updated'));
-
-    // 2. Background sync to Firestore
-    if (isFirebaseConfigured && db) {
-      try {
-        await deleteDoc(doc(db, COLLECTION_NAME, id));
-      } catch (err: any) {
-        console.warn('Firestore deleteCard notice:', err.message);
-      }
-    }
   }
 };

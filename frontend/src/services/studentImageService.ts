@@ -33,62 +33,53 @@ const setLocalStudentImages = (items: StudentImage[]) => {
 
 export const studentImageService = {
   subscribeToStudentImages: (callback: (items: StudentImage[]) => void): (() => void) => {
-    let unsubsFirestore: (() => void) | null = null;
-
-    const notify = () => {
-      callback(getLocalStudentImages());
-    };
-
-    window.addEventListener('vatsalya_student_images_updated', notify);
-    notify();
-
     if (isFirebaseConfigured && db) {
       try {
         const q = query(collection(db, COLLECTION_NAME), orderBy('createdAt', 'desc'));
-        unsubsFirestore = onSnapshot(
+        const unsubscribe = onSnapshot(
           q,
           (snapshot) => {
-            if (!snapshot.empty) {
-              const items: StudentImage[] = snapshot.docs.map((docSnap) => {
-                const data = docSnap.data();
-                return {
-                  _id: docSnap.id,
-                  title: data.title || '',
-                  image: data.image || '',
-                  description: data.description || '',
-                  focalPoint: data.focalPoint || { x: 50, y: 50 },
-                  createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.createdAt || new Date().toISOString()
-                };
-              });
-              setLocalStudentImages(items);
-              callback(items);
+            if (snapshot.empty) {
+              callback(fallbackStudentImages);
+              return;
             }
+            const items: StudentImage[] = snapshot.docs.map((docSnap) => {
+              const data = docSnap.data();
+              return {
+                _id: docSnap.id,
+                title: data.title || '',
+                image: data.image || '',
+                description: data.description || '',
+                focalPoint: data.focalPoint || { x: 50, y: 50 },
+                createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.createdAt || new Date().toISOString()
+              };
+            });
+            callback(items);
           },
           (err) => {
-            console.warn('Firestore student images notice, using local data:', err.message);
+            console.warn('Firestore student images subscribe error:', err);
+            callback(getLocalStudentImages());
           }
         );
+        return unsubscribe;
       } catch (err) {
         console.warn('Error subscribing to student images:', err);
       }
     }
 
-    return () => {
-      window.removeEventListener('vatsalya_student_images_updated', notify);
-      if (unsubsFirestore) unsubsFirestore();
-    };
+    callback(getLocalStudentImages());
+    const handleUpdate = () => callback(getLocalStudentImages());
+    window.addEventListener('vatsalya_student_images_updated', handleUpdate);
+    return () => window.removeEventListener('vatsalya_student_images_updated', handleUpdate);
   },
 
   getAll: async (): Promise<StudentImage[]> => {
     if (isFirebaseConfigured && db) {
       try {
         const q = query(collection(db, COLLECTION_NAME), orderBy('createdAt', 'desc'));
-        const snapshot = await Promise.race([
-          getDocs(q),
-          new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 3500))
-        ]);
+        const snapshot = await getDocs(q);
         if (!snapshot.empty) {
-          const items = snapshot.docs.map((docSnap) => {
+          return snapshot.docs.map((docSnap) => {
             const data = docSnap.data();
             return {
               _id: docSnap.id,
@@ -99,11 +90,9 @@ export const studentImageService = {
               createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.createdAt || new Date().toISOString()
             };
           });
-          setLocalStudentImages(items);
-          return items;
         }
       } catch (err) {
-        console.warn('Failed to fetch student images from Firestore (using local):', err);
+        console.warn('Failed to fetch student images from Firestore:', err);
       }
     }
     return getLocalStudentImages();
@@ -117,7 +106,19 @@ export const studentImageService = {
       focalPoint: data.focalPoint || { x: 50, y: 50 }
     };
 
-    // 1. Save locally first (instant UI update)
+    if (isFirebaseConfigured && db) {
+      const cleanData = cleanFirestoreData({
+        ...newItem,
+        createdAt: serverTimestamp()
+      });
+      const docRef = await addDoc(collection(db, COLLECTION_NAME), cleanData);
+      return {
+        _id: docRef.id,
+        ...newItem,
+        createdAt: new Date().toISOString()
+      } as StudentImage;
+    }
+
     const current = getLocalStudentImages();
     const created: StudentImage = {
       _id: `student-${Date.now()}`,
@@ -126,43 +127,22 @@ export const studentImageService = {
     };
     setLocalStudentImages([created, ...current]);
     window.dispatchEvent(new CustomEvent('vatsalya_student_images_updated'));
-
-    // 2. Background sync to Firestore
-    if (isFirebaseConfigured && db) {
-      try {
-        const cleanData = cleanFirestoreData({
-          ...newItem,
-          createdAt: serverTimestamp()
-        });
-        const docRef = await addDoc(collection(db, COLLECTION_NAME), cleanData);
-        created._id = docRef.id;
-      } catch (err: any) {
-        console.warn('Firestore student image create notice:', err.message);
-      }
-    }
-
     return created;
   },
 
   update: async (id: string, data: Partial<StudentImage>): Promise<StudentImage> => {
-    // 1. Update locally first
+    if (isFirebaseConfigured && db) {
+      const docRef = doc(db, COLLECTION_NAME, id);
+      const updateData: any = { ...data };
+      delete updateData._id;
+      await updateDoc(docRef, cleanFirestoreData(updateData));
+      return { _id: id, ...data } as StudentImage;
+    }
+
     const current = getLocalStudentImages();
     const updated = current.map((item) => (item._id === id ? { ...item, ...data } : item));
     setLocalStudentImages(updated);
     window.dispatchEvent(new CustomEvent('vatsalya_student_images_updated'));
-
-    // 2. Background sync to Firestore
-    if (isFirebaseConfigured && db) {
-      try {
-        const docRef = doc(db, COLLECTION_NAME, id);
-        const updateData: any = { ...data };
-        delete updateData._id;
-        await updateDoc(docRef, cleanFirestoreData(updateData));
-      } catch (err: any) {
-        console.warn('Firestore student image update notice:', err.message);
-      }
-    }
-
     return { _id: id, ...data } as StudentImage;
   },
 
@@ -171,19 +151,14 @@ export const studentImageService = {
       deleteMediaFromStorage(mediaUrl).catch(() => {});
     }
 
-    // 1. Delete locally first
+    if (isFirebaseConfigured && db) {
+      await deleteDoc(doc(db, COLLECTION_NAME, id));
+      return;
+    }
+
     const current = getLocalStudentImages();
     const updated = current.filter((item) => item._id !== id);
     setLocalStudentImages(updated);
     window.dispatchEvent(new CustomEvent('vatsalya_student_images_updated'));
-
-    // 2. Background sync to Firestore
-    if (isFirebaseConfigured && db) {
-      try {
-        await deleteDoc(doc(db, COLLECTION_NAME, id));
-      } catch (err: any) {
-        console.warn('Firestore student image delete notice:', err.message);
-      }
-    }
   }
 };

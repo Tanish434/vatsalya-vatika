@@ -31,61 +31,52 @@ const setLocalFacilities = (items: FacilityItem[]) => {
 
 export const facilityService = {
   subscribeToFacilities: (callback: (items: FacilityItem[]) => void): (() => void) => {
-    let unsubsFirestore: (() => void) | null = null;
-
-    const notify = () => {
-      callback(getLocalFacilities());
-    };
-
-    window.addEventListener('vatsalya_facilities_updated', notify);
-    notify();
-
     if (isFirebaseConfigured && db) {
       try {
-        unsubsFirestore = onSnapshot(
+        const unsubscribe = onSnapshot(
           collection(db, COLLECTION_NAME),
           (snapshot) => {
-            if (!snapshot.empty) {
-              const items: FacilityItem[] = snapshot.docs.map((docSnap) => {
-                const data = docSnap.data();
-                return {
-                  _id: docSnap.id,
-                  title: data.title || '',
-                  description: data.description || '',
-                  icon: data.icon || 'BookOpen',
-                  image: data.image || '',
-                  focalPoint: data.focalPoint || { x: 50, y: 50 },
-                  createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.createdAt || new Date().toISOString()
-                };
-              });
-              setLocalFacilities(items);
-              callback(items);
+            if (snapshot.empty) {
+              callback(fallbackFacilities);
+              return;
             }
+            const items: FacilityItem[] = snapshot.docs.map((docSnap) => {
+              const data = docSnap.data();
+              return {
+                _id: docSnap.id,
+                title: data.title || '',
+                description: data.description || '',
+                icon: data.icon || 'BookOpen',
+                image: data.image || '',
+                focalPoint: data.focalPoint || { x: 50, y: 50 },
+                createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.createdAt || new Date().toISOString()
+              };
+            });
+            callback(items);
           },
           (err) => {
-            console.warn('Firestore facilities notice, using local data:', err.message);
+            console.warn('Firestore facilities subscribe error:', err);
+            callback(getLocalFacilities());
           }
         );
+        return unsubscribe;
       } catch (err) {
         console.warn('Error subscribing to facilities:', err);
       }
     }
 
-    return () => {
-      window.removeEventListener('vatsalya_facilities_updated', notify);
-      if (unsubsFirestore) unsubsFirestore();
-    };
+    callback(getLocalFacilities());
+    const handleUpdate = () => callback(getLocalFacilities());
+    window.addEventListener('vatsalya_facilities_updated', handleUpdate);
+    return () => window.removeEventListener('vatsalya_facilities_updated', handleUpdate);
   },
 
   getFacilities: async (): Promise<FacilityItem[]> => {
     if (isFirebaseConfigured && db) {
       try {
-        const snapshot = await Promise.race([
-          getDocs(collection(db, COLLECTION_NAME)),
-          new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 3500))
-        ]);
+        const snapshot = await getDocs(collection(db, COLLECTION_NAME));
         if (!snapshot.empty) {
-          const items = snapshot.docs.map((docSnap) => {
+          return snapshot.docs.map((docSnap) => {
             const data = docSnap.data();
             return {
               _id: docSnap.id,
@@ -97,11 +88,9 @@ export const facilityService = {
               createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.createdAt || new Date().toISOString()
             };
           });
-          setLocalFacilities(items);
-          return items;
         }
       } catch (err) {
-        console.warn('Failed to load facilities from Firestore (using local):', err);
+        console.warn('Failed to load facilities from Firestore:', err);
       }
     }
     return getLocalFacilities();
@@ -116,7 +105,19 @@ export const facilityService = {
       focalPoint: data.focalPoint || { x: 50, y: 50 }
     };
 
-    // 1. Save locally first (instant UI update)
+    if (isFirebaseConfigured && db) {
+      const cleanData = cleanFirestoreData({
+        ...newItem,
+        createdAt: serverTimestamp()
+      });
+      const docRef = await addDoc(collection(db, COLLECTION_NAME), cleanData);
+      return {
+        _id: docRef.id,
+        ...newItem,
+        createdAt: new Date().toISOString()
+      } as FacilityItem;
+    }
+
     const current = getLocalFacilities();
     const created: FacilityItem = {
       _id: `facility-${Date.now()}`,
@@ -125,43 +126,22 @@ export const facilityService = {
     };
     setLocalFacilities([...current, created]);
     window.dispatchEvent(new CustomEvent('vatsalya_facilities_updated'));
-
-    // 2. Background sync to Firestore
-    if (isFirebaseConfigured && db) {
-      try {
-        const cleanData = cleanFirestoreData({
-          ...newItem,
-          createdAt: serverTimestamp()
-        });
-        const docRef = await addDoc(collection(db, COLLECTION_NAME), cleanData);
-        created._id = docRef.id;
-      } catch (err: any) {
-        console.warn('Firestore createFacility notice:', err.message);
-      }
-    }
-
     return created;
   },
 
   updateFacility: async (id: string, data: Partial<FacilityItem>): Promise<FacilityItem> => {
-    // 1. Update locally first
+    if (isFirebaseConfigured && db) {
+      const docRef = doc(db, COLLECTION_NAME, id);
+      const updateData: any = { ...data };
+      delete updateData._id;
+      await updateDoc(docRef, cleanFirestoreData(updateData));
+      return { _id: id, ...data } as FacilityItem;
+    }
+
     const current = getLocalFacilities();
     const updated = current.map((item) => (item._id === id ? { ...item, ...data } : item));
     setLocalFacilities(updated);
     window.dispatchEvent(new CustomEvent('vatsalya_facilities_updated'));
-
-    // 2. Background sync to Firestore
-    if (isFirebaseConfigured && db) {
-      try {
-        const docRef = doc(db, COLLECTION_NAME, id);
-        const updateData: any = { ...data };
-        delete updateData._id;
-        await updateDoc(docRef, cleanFirestoreData(updateData));
-      } catch (err: any) {
-        console.warn('Firestore updateFacility notice:', err.message);
-      }
-    }
-
     return { _id: id, ...data } as FacilityItem;
   },
 
@@ -170,19 +150,14 @@ export const facilityService = {
       deleteMediaFromStorage(mediaUrl).catch(() => {});
     }
 
-    // 1. Delete locally first
+    if (isFirebaseConfigured && db) {
+      await deleteDoc(doc(db, COLLECTION_NAME, id));
+      return;
+    }
+
     const current = getLocalFacilities();
     const updated = current.filter((item) => item._id !== id);
     setLocalFacilities(updated);
     window.dispatchEvent(new CustomEvent('vatsalya_facilities_updated'));
-
-    // 2. Background sync to Firestore
-    if (isFirebaseConfigured && db) {
-      try {
-        await deleteDoc(doc(db, COLLECTION_NAME, id));
-      } catch (err: any) {
-        console.warn('Firestore deleteFacility notice:', err.message);
-      }
-    }
   }
 };
