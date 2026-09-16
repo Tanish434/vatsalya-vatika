@@ -1,62 +1,74 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
   <defs>
-    <!-- Dark background radial gradient -->
-    <radialGradient id="bgG" cx="50%" cy="50%" r="50%">
-      <stop offset="0%"   stop-color="#2a1a08"/>
-      <stop offset="70%"  stop-color="#140e06"/>
-      <stop offset="100%" stop-color="#0a0804"/>
+    <!-- Deep dark warm background -->
+    <radialGradient id="bg" cx="50%" cy="55%" r="60%">
+      <stop offset="0%"   stop-color="#1f1408"/>
+      <stop offset="50%"  stop-color="#120d05"/>
+      <stop offset="100%" stop-color="#090603"/>
     </radialGradient>
 
-    <!-- Gold gradient for ring and Om -->
-    <linearGradient id="goldG" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%"   stop-color="#FFF8D6"/>
-      <stop offset="20%"  stop-color="#FFD966"/>
-      <stop offset="50%"  stop-color="#F59E0B"/>
-      <stop offset="80%"  stop-color="#B45309"/>
-      <stop offset="100%" stop-color="#78350F"/>
+    <!-- Rich gold gradient -->
+    <linearGradient id="gold" x1="10%" y1="0%" x2="90%" y2="100%">
+      <stop offset="0%"   stop-color="#FFF5B0"/>
+      <stop offset="30%"  stop-color="#FFCC33"/>
+      <stop offset="60%"  stop-color="#E08B00"/>
+      <stop offset="100%" stop-color="#7A4500"/>
     </linearGradient>
 
-    <!-- Clip circle so Om never bleeds outside -->
-    <clipPath id="circleClip">
-      <circle cx="256" cy="256" r="228"/>
+    <!-- Clip: Om stays inside r=185 — very safe margin -->
+    <clipPath id="safeClip">
+      <circle cx="256" cy="256" r="185"/>
     </clipPath>
 
-    <!-- Soft ambient glow -->
-    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
-      <feGaussianBlur stdDeviation="14" result="blur"/>
-      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    <!-- Outer ring glow -->
+    <filter id="ringFx" x="-15%" y="-15%" width="130%" height="130%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="8" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
     </filter>
 
-    <!-- Text drop-shadow for 3-D feel -->
-    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
-      <feDropShadow dx="0" dy="4" stdDeviation="8"  flood-color="#000" flood-opacity="0.8"/>
-      <feDropShadow dx="0" dy="0" stdDeviation="16" flood-color="#F59E0B" flood-opacity="0.4"/>
+    <!-- Om golden glow -->
+    <filter id="omFx" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="10" result="blur"/>
+      <feFlood flood-color="#FFAA00" flood-opacity="0.7" result="color"/>
+      <feComposite in="color" in2="blur" operator="in" result="glow"/>
+      <feMerge>
+        <feMergeNode in="glow"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
     </filter>
   </defs>
 
-  <!-- ── Solid circular base ── -->
-  <circle cx="256" cy="256" r="250" fill="url(#bgG)"/>
+  <!-- ── Background circle ── -->
+  <circle cx="256" cy="256" r="256" fill="url(#bg)"/>
 
-  <!-- ── Outer decorative ring ── -->
-  <circle cx="256" cy="256" r="242" fill="none" stroke="url(#goldG)" stroke-width="10"/>
+  <!-- ── Outer gold ring with glow ── -->
+  <circle cx="256" cy="256" r="244" fill="none"
+          stroke="url(#gold)" stroke-width="11"
+          filter="url(#ringFx)"/>
 
-  <!-- ── Subtle inner ring filigree ── -->
-  <circle cx="256" cy="256" r="228" fill="none" stroke="url(#goldG)" stroke-width="2.5" opacity="0.7" stroke-dasharray="10 5"/>
+  <!-- ── Inner thin accent ring ── -->
+  <circle cx="256" cy="256" r="228" fill="none"
+          stroke="url(#gold)" stroke-width="2.5" opacity="0.6"/>
 
-  <!-- ── Ambient glow circle ── -->
-  <circle cx="256" cy="256" r="242" fill="none" stroke="#F59E0B" stroke-width="6" opacity="0.2" filter="url(#glow)"/>
-
-  <!-- ── Om symbol — clipped inside circle, perfectly centered ── -->
-  <g clip-path="url(#circleClip)" filter="url(#shadow)">
+  <!-- ── Om symbol: font-size=120, strictly clipped at r=185 ── -->
+  <!-- 
+    At font-size=120, Devanagari ॐ fits approx in 100w x 130h box
+    Center x=256, baseline y=275
+    Estimated top = 275 - 125 = 150  → distance from center = 256-150 = 106 < 185 ✓
+    Estimated bottom = 275 + 5 = 280  → distance from center = 280-256 = 24 < 185 ✓
+  -->
+  <g clip-path="url(#safeClip)" filter="url(#omFx)">
     <text
       x="256"
-      y="310"
-      font-family="'Noto Sans Devanagari','Nirmala UI','Mangal','Segoe UI',sans-serif"
-      font-size="220"
+      y="275"
+      font-family="'Noto Sans Devanagari','Mangal','Nirmala UI','Arial Unicode MS',sans-serif"
+      font-size="120"
       font-weight="900"
-      fill="url(#goldG)"
+      fill="url(#gold)"
       text-anchor="middle"
-      dominant-baseline="auto"
     >ॐ</text>
   </g>
 </svg>
