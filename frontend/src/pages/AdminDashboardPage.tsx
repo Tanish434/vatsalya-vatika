@@ -774,18 +774,7 @@ export const AdminDashboardPage: React.FC = () => {
           </div>
 
           {/* Right: Actions */}
-          <div className="flex items-center gap-1 sm:gap-2.5 shrink-0">
-
-            {/* Direct Quick Action: Change QR Code */}
-            <button
-              onClick={() => setShowQrModal(true)}
-              className="inline-flex items-center gap-1 px-2 py-1.5 sm:px-3 sm:py-2 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-bold bg-amber-500/15 hover:bg-amber-500/25 text-amber-800 dark:text-amber-200 border border-amber-300/70 dark:border-amber-700/60 transition-all shadow-sm shrink-0 cursor-pointer active:scale-95"
-              title="Change Donation QR Code"
-            >
-              <QrCode className="w-3.5 h-3.5 text-ashram-saffron shrink-0" />
-              <span className="hidden sm:inline">Change QR</span>
-              <span className="sm:hidden">QR</span>
-            </button>
+          <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
 
             <Link
               to="/"
