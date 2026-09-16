@@ -10,28 +10,22 @@
   "theme_color": "#111111",
   "icons": [
     {
-      "src": "/om-icon.svg",
+      "src": "/desktop-icon.png",
       "sizes": "192x192",
-      "type": "image/svg+xml",
+      "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "/om-icon.svg",
+      "src": "/desktop-icon.png",
       "sizes": "512x512",
-      "type": "image/svg+xml",
+      "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "/om-icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
+      "src": "/desktop-icon.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
       "purpose": "any maskable"
-    },
-    {
-      "src": "/favicon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
-      "purpose": "any"
     }
   ]
 }

@@ -3,13 +3,12 @@
    Registers app for offline support & home screen install
    ============================================================ */
 
-const CACHE_NAME = 'vatsalya-vatika-v1';
+const CACHE_NAME = 'vatsalya-vatika-v3';
 
 // Files to cache for offline use
 const STATIC_ASSETS = [
   '/',
-  '/om-icon-192.png',
-  '/om-icon-512.png',
+  '/desktop-icon.png',
   '/site.webmanifest'
 ];
 
@@ -59,9 +58,6 @@ self.addEventListener('fetch', (event) => {
         }
         return response;
       })
-      .catch(() => {
-        // Fallback to cache if network fails
-        return caches.match(event.request);
-      })
+      .catch(() => caches.match(event.request))
   );
 });
