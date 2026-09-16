@@ -3,13 +3,14 @@
    Registers app for offline support & home screen install
    ============================================================ */
 
-const CACHE_NAME = 'vatsalya-vatika-v3';
+const CACHE_NAME = 'vatsalya-vatika-v4';
 
 // Files to cache for offline use
 const STATIC_ASSETS = [
   '/',
+  '/desktop-icon.png?v=4',
   '/desktop-icon.png',
-  '/site.webmanifest'
+  '/site.webmanifest?v=4'
 ];
 
 // ── Install: cache static assets ──────────────────────────────

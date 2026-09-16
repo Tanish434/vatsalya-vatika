@@ -10,22 +10,28 @@
   "theme_color": "#111111",
   "icons": [
     {
-      "src": "/desktop-icon.png",
+      "src": "/desktop-icon.png?v=4",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
     },
     {
-      "src": "/desktop-icon.png",
+      "src": "/desktop-icon.png?v=4",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
     },
     {
-      "src": "/desktop-icon.png",
+      "src": "/desktop-icon.png?v=4",
       "sizes": "1024x1024",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/desktop-icon.png?v=4",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ]
 }
