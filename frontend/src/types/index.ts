@@ -72,6 +72,7 @@ export interface ApiResponse<T> {
 }
 
 export interface SiteSettingsData {
+  _id?: string;
   heroTitle: string;
   heroSubtitle: string;
   aboutText: string;

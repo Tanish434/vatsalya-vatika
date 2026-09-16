@@ -65,7 +65,6 @@ import { memoryVaultService } from '../services/memoryVaultService';
 import { studentImageService } from '../services/studentImageService';
 import { carouselService } from '../services/carouselService';
 import { donationSettingsService, DonationSettings } from '../services/donationSettingsService';
-import api from '../services/api';
 import toast from 'react-hot-toast';
 import { uploadMediaWithProgress, isFirebaseConfigured } from '../lib/firebase';
 

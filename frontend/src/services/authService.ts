@@ -1,4 +1,11 @@
-import { signInWithEmailAndPassword, signOut, onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
+import { 
+  signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword,
+  updateProfile,
+  signOut, 
+  onAuthStateChanged, 
+  User as FirebaseUser 
+} from 'firebase/auth';
 import { auth, isFirebaseConfigured } from '../lib/firebase';
 import { UserAdmin } from '../types';
 
@@ -7,10 +14,10 @@ const TOKEN_STORAGE_KEY = 'vatsalya_admin_token';
 
 export const authService = {
   login: async (email: string, password: string): Promise<{ token: string; user: UserAdmin }> => {
-    // 1. Firebase Authentication if configured
+    // 1. Firebase Authentication
     if (isFirebaseConfigured && auth) {
       try {
-        const userCredential = await signInWithEmailAndPassword(auth, email, password);
+        const userCredential = await signInWithEmailAndPassword(auth, email.trim(), password);
         const fbUser = userCredential.user;
         const idToken = await fbUser.getIdToken();
         const userAdmin: UserAdmin = {
@@ -24,49 +31,38 @@ export const authService = {
         localStorage.setItem(ADMIN_STORAGE_KEY, JSON.stringify(userAdmin));
         return { token: idToken, user: userAdmin };
       } catch (err: any) {
-        // If Firebase auth failed, check default admin credentials for convenience
-        if (email.toLowerCase() === 'guruji@gmail.com' && password === 'vatsalyavatika') {
-          console.warn('Logging in with default admin credentials fallback.');
-        } else {
-          throw new Error(err.message || 'Invalid email or password');
+        const errorCode = err.code || '';
+        if (errorCode === 'auth/invalid-credential' || errorCode === 'auth/wrong-password' || errorCode === 'auth/user-not-found') {
+          throw new Error('Invalid email or password.');
+        } else if (errorCode === 'auth/too-many-requests') {
+          throw new Error('Too many failed attempts. Please try again later.');
         }
+        throw new Error(err.message || 'Authentication failed. Please check your credentials.');
       }
     }
 
-    // 2. Default Local Admin Credentials (instant dev / offline mode)
-    if (email.toLowerCase() === 'guruji@gmail.com' && password === 'vatsalyavatika') {
-      const userAdmin: UserAdmin = {
-        _id: 'admin-guruji',
-        name: 'Guruji',
-        email: 'guruji@gmail.com',
-        role: 'admin'
-      };
-      const token = `token-${Date.now()}`;
-      localStorage.setItem(TOKEN_STORAGE_KEY, token);
-      localStorage.setItem(ADMIN_STORAGE_KEY, JSON.stringify(userAdmin));
-      return { token, user: userAdmin };
-    }
-
-    // Generic dev login
+    // 2. Offline / Local development fallback only when Firebase is not configured
     if (email && password.length >= 6) {
       const userAdmin: UserAdmin = {
         _id: `user-${Date.now()}`,
         name: email.split('@')[0],
-        email,
+        email: email.trim(),
         role: 'admin'
       };
-      const token = `token-${Date.now()}`;
+      const token = `local-token-${Date.now()}`;
       localStorage.setItem(TOKEN_STORAGE_KEY, token);
       localStorage.setItem(ADMIN_STORAGE_KEY, JSON.stringify(userAdmin));
       return { token, user: userAdmin };
     }
 
-    throw new Error('Invalid credentials. Use guruji@gmail.com / vatsalyavatika');
+    throw new Error('Please enter a valid email and password.');
   },
 
-  logout: () => {
+  logout: async () => {
     if (isFirebaseConfigured && auth) {
-      signOut(auth).catch(() => {});
+      try {
+        await signOut(auth);
+      } catch {}
     }
     localStorage.removeItem(TOKEN_STORAGE_KEY);
     localStorage.removeItem(ADMIN_STORAGE_KEY);
@@ -87,6 +83,21 @@ export const authService = {
   },
 
   register: async (name: string, email: string, password: string, phone?: string): Promise<{ success: boolean; message: string }> => {
+    if (isFirebaseConfigured && auth) {
+      try {
+        const userCredential = await createUserWithEmailAndPassword(auth, email.trim(), password);
+        if (name) {
+          await updateProfile(userCredential.user, { displayName: name.trim() });
+        }
+        return {
+          success: true,
+          message: 'Account registered successfully.'
+        };
+      } catch (err: any) {
+        throw new Error(err.message || 'Registration failed.');
+      }
+    }
+
     return {
       success: true,
       message: 'Account registered successfully.'

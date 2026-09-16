@@ -182,9 +182,10 @@ export const carouselService = {
       .filter(Boolean) as CarouselImage[];
 
     if (isFirebaseConfigured && db) {
-      const batch = writeBatch(db);
+      const firestore = db;
+      const batch = writeBatch(firestore);
       reordered.forEach((item) => {
-        const docRef = doc(db, COLLECTION_NAME, item._id);
+        const docRef = doc(firestore, COLLECTION_NAME, item._id);
         batch.update(docRef, { order: item.order });
       });
       await batch.commit();

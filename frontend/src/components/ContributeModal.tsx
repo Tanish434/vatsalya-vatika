@@ -26,12 +26,11 @@ export const ContributeModal: React.FC<ContributeModalProps> = ({ isOpen, onClos
   const [donationSettings, setDonationSettings] = useState<DonationSettings | null>(null);
   
   React.useEffect(() => {
-    if (isOpen) {
-      const unsub = donationSettingsService.subscribeToDonationSettings(setDonationSettings);
-      return () => {
-        if (typeof unsub === 'function') unsub();
-      };
-    }
+    if (!isOpen) return;
+    const unsub = donationSettingsService.subscribeToDonationSettings(setDonationSettings);
+    return () => {
+      if (typeof unsub === 'function') unsub();
+    };
   }, [isOpen]);
 
   // Validation errors state
