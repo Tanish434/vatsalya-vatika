@@ -223,32 +223,42 @@ export const reviewService = {
   },
 
   toggleApproval: async (id: string): Promise<ReviewItem> => {
-    const all = await reviewService.getAllReviews();
-    const target = all.find((r) => r._id === id);
+    const current = getLocalReviews();
+    const target = current.find((r) => r._id === id);
     const newStatus = target ? !target.approved : true;
 
-    if (isFirebaseConfigured && db) {
-      const docRef = doc(db, COLLECTION_NAME, id);
-      await updateDoc(docRef, { approved: newStatus });
-      return { ...(target || { _id: id }), approved: newStatus } as ReviewItem;
-    }
-
-    const current = getLocalReviews();
+    // 1. Update locally first
     const updated = current.map((r) => (r._id === id ? { ...r, approved: newStatus } : r));
     setLocalReviews(updated);
     window.dispatchEvent(new CustomEvent('vatsalya_reviews_updated'));
-    return updated.find((r) => r._id === id)!;
+
+    // 2. Background sync to Firestore
+    if (isFirebaseConfigured && db) {
+      try {
+        const docRef = doc(db, COLLECTION_NAME, id);
+        await updateDoc(docRef, { approved: newStatus });
+      } catch (err: any) {
+        console.warn('Firestore toggle review approval notice:', err.message);
+      }
+    }
+
+    return updated.find((r) => r._id === id) || ({ ...(target || { _id: id }), approved: newStatus } as ReviewItem);
   },
 
   deleteReview: async (id: string): Promise<void> => {
-    if (isFirebaseConfigured && db) {
-      await deleteDoc(doc(db, COLLECTION_NAME, id));
-      return;
-    }
-
+    // 1. Delete locally first
     const current = getLocalReviews();
     const updated = current.filter((r) => r._id !== id);
     setLocalReviews(updated);
     window.dispatchEvent(new CustomEvent('vatsalya_reviews_updated'));
+
+    // 2. Background sync to Firestore
+    if (isFirebaseConfigured && db) {
+      try {
+        await deleteDoc(doc(db, COLLECTION_NAME, id));
+      } catch (err: any) {
+        console.warn('Firestore delete review notice:', err.message);
+      }
+    }
   }
 };

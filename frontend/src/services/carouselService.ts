@@ -34,56 +34,65 @@ const setLocalCarousel = (items: CarouselImage[]) => {
 
 export const carouselService = {
   subscribeToCarousel: (callback: (items: CarouselImage[]) => void): (() => void) => {
+    let unsubsFirestore: (() => void) | null = null;
+
+    const notify = () => {
+      callback(getLocalCarousel());
+    };
+
+    window.addEventListener('vatsalya_carousel_updated', notify);
+    notify();
+
     if (isFirebaseConfigured && db) {
       try {
         const q = query(collection(db, COLLECTION_NAME), orderBy('order', 'asc'));
-        const unsubscribe = onSnapshot(
+        unsubsFirestore = onSnapshot(
           q,
           (snapshot) => {
-            if (snapshot.empty) {
-              callback(fallbackCarouselImages);
-              return;
+            if (!snapshot.empty) {
+              const items: CarouselImage[] = snapshot.docs.map((docSnap) => {
+                const data = docSnap.data();
+                return {
+                  _id: docSnap.id,
+                  image: data.image || '',
+                  title: data.title || '',
+                  description: data.description || '',
+                  category: data.category || '',
+                  date: data.date || '',
+                  isActive: data.isActive !== undefined ? data.isActive : true,
+                  order: data.order !== undefined ? data.order : 0,
+                  createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.createdAt || new Date().toISOString()
+                };
+              });
+              setLocalCarousel(items);
+              callback(items);
             }
-            const items: CarouselImage[] = snapshot.docs.map((docSnap) => {
-              const data = docSnap.data();
-              return {
-                _id: docSnap.id,
-                image: data.image || '',
-                title: data.title || '',
-                description: data.description || '',
-                category: data.category || '',
-                date: data.date || '',
-                isActive: data.isActive !== undefined ? data.isActive : true,
-                order: data.order !== undefined ? data.order : 0,
-                createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.createdAt || new Date().toISOString()
-              };
-            });
-            callback(items);
           },
           (err) => {
-            console.warn('Firestore carousel subscribe error:', err);
-            callback(getLocalCarousel());
+            console.warn('Firestore carousel notice, using local data:', err.message);
           }
         );
-        return unsubscribe;
       } catch (err) {
         console.warn('Error subscribing to carousel:', err);
       }
     }
 
-    callback(getLocalCarousel());
-    const handleUpdate = () => callback(getLocalCarousel());
-    window.addEventListener('vatsalya_carousel_updated', handleUpdate);
-    return () => window.removeEventListener('vatsalya_carousel_updated', handleUpdate);
+    return () => {
+      window.removeEventListener('vatsalya_carousel_updated', notify);
+      if (unsubsFirestore) unsubsFirestore();
+    };
   },
 
   getImages: async (): Promise<CarouselImage[]> => {
     if (isFirebaseConfigured && db) {
       try {
         const q = query(collection(db, COLLECTION_NAME), orderBy('order', 'asc'));
-        const snapshot = await getDocs(q);
+        const snapshot = await Promise.race([
+          getDocs(q),
+          new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 3500))
+        ]);
         if (!snapshot.empty) {
-          return snapshot.docs.map((docSnap) => {
+          const items = snapshot.docs.map((docSnap) => {
             const data = docSnap.data();
             return {
               _id: docSnap.id,
@@ -97,9 +106,11 @@ export const carouselService = {
               createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.createdAt || new Date().toISOString()
             };
           });
+          setLocalCarousel(items);
+          return items;
         }
       } catch (err) {
-        console.warn('Failed to fetch carousel from Firestore:', err);
+        console.warn('Failed to fetch carousel from Firestore (using local):', err);
       }
     }
     return getLocalCarousel();
@@ -117,19 +128,7 @@ export const carouselService = {
       order: data.order !== undefined ? data.order : current.length
     };
 
-    if (isFirebaseConfigured && db) {
-      const cleanData = cleanFirestoreData({
-        ...newImage,
-        createdAt: serverTimestamp()
-      });
-      const docRef = await addDoc(collection(db, COLLECTION_NAME), cleanData);
-      return {
-        _id: docRef.id,
-        ...newImage,
-        createdAt: new Date().toISOString()
-      } as CarouselImage;
-    }
-
+    // 1. Save locally first (instant UI update)
     const created: CarouselImage = {
       _id: `carousel-${Date.now()}`,
       ...newImage,
@@ -137,22 +136,43 @@ export const carouselService = {
     };
     setLocalCarousel([...current, created]);
     window.dispatchEvent(new CustomEvent('vatsalya_carousel_updated'));
+
+    // 2. Background sync to Firestore
+    if (isFirebaseConfigured && db) {
+      try {
+        const cleanData = cleanFirestoreData({
+          ...newImage,
+          createdAt: serverTimestamp()
+        });
+        const docRef = await addDoc(collection(db, COLLECTION_NAME), cleanData);
+        created._id = docRef.id;
+      } catch (err: any) {
+        console.warn('Firestore addImage notice:', err.message);
+      }
+    }
+
     return created;
   },
 
   updateImage: async (id: string, data: Partial<CarouselImage>): Promise<CarouselImage> => {
-    if (isFirebaseConfigured && db) {
-      const docRef = doc(db, COLLECTION_NAME, id);
-      const updateData: any = { ...data };
-      delete updateData._id;
-      await updateDoc(docRef, cleanFirestoreData(updateData));
-      return { _id: id, ...data } as CarouselImage;
-    }
-
+    // 1. Update locally first
     const current = getLocalCarousel();
     const updated = current.map((item) => (item._id === id ? { ...item, ...data } : item));
     setLocalCarousel(updated);
     window.dispatchEvent(new CustomEvent('vatsalya_carousel_updated'));
+
+    // 2. Background sync to Firestore
+    if (isFirebaseConfigured && db) {
+      try {
+        const docRef = doc(db, COLLECTION_NAME, id);
+        const updateData: any = { ...data };
+        delete updateData._id;
+        await updateDoc(docRef, cleanFirestoreData(updateData));
+      } catch (err: any) {
+        console.warn('Firestore updateImage notice:', err.message);
+      }
+    }
+
     return { _id: id, ...data } as CarouselImage;
   },
 
@@ -161,15 +181,20 @@ export const carouselService = {
       deleteMediaFromStorage(mediaUrl).catch(() => {});
     }
 
-    if (isFirebaseConfigured && db) {
-      await deleteDoc(doc(db, COLLECTION_NAME, id));
-      return;
-    }
-
+    // 1. Delete locally first
     const current = getLocalCarousel();
     const updated = current.filter((item) => item._id !== id);
     setLocalCarousel(updated);
     window.dispatchEvent(new CustomEvent('vatsalya_carousel_updated'));
+
+    // 2. Background sync to Firestore
+    if (isFirebaseConfigured && db) {
+      try {
+        await deleteDoc(doc(db, COLLECTION_NAME, id));
+      } catch (err: any) {
+        console.warn('Firestore deleteImage notice:', err.message);
+      }
+    }
   },
 
   reorderImages: async (orderedIds: string[]): Promise<CarouselImage[]> => {
@@ -181,18 +206,24 @@ export const carouselService = {
       })
       .filter(Boolean) as CarouselImage[];
 
-    if (isFirebaseConfigured && db) {
-      const batch = writeBatch(db);
-      reordered.forEach((item) => {
-        const docRef = doc(db, COLLECTION_NAME, item._id);
-        batch.update(docRef, { order: item.order });
-      });
-      await batch.commit();
-      return reordered;
-    }
-
+    // 1. Update locally first
     setLocalCarousel(reordered);
     window.dispatchEvent(new CustomEvent('vatsalya_carousel_updated'));
+
+    // 2. Background sync to Firestore
+    if (isFirebaseConfigured && db) {
+      try {
+        const batch = writeBatch(db);
+        reordered.forEach((item) => {
+          const docRef = doc(db, COLLECTION_NAME, item._id);
+          batch.update(docRef, { order: item.order });
+        });
+        await batch.commit();
+      } catch (err: any) {
+        console.warn('Firestore reorder notice:', err.message);
+      }
+    }
+
     return reordered;
   }
 };

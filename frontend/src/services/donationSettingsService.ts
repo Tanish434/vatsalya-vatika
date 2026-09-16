@@ -42,59 +42,82 @@ const setLocalSettings = (settings: DonationSettings) => {
 
 export const donationSettingsService = {
   subscribeToDonationSettings: (callback: (settings: DonationSettings) => void): (() => void) => {
+    let unsubsFirestore: (() => void) | null = null;
+
+    const notify = () => {
+      callback(getLocalSettings());
+    };
+
+    window.addEventListener('vatsalya_donation_settings_updated', notify);
+    notify();
+
     if (isFirebaseConfigured && db) {
       try {
         const docRef = doc(db, COLLECTION_NAME, DOC_ID);
-        const unsubscribe = onSnapshot(docRef, (docSnap) => {
-          if (docSnap.exists()) {
-            callback({ _id: docSnap.id, ...docSnap.data() } as DonationSettings);
-          } else {
-            // Initialize default
-            setDoc(docRef, defaultDonationSettings).catch(() => {});
-            callback(defaultDonationSettings);
+        unsubsFirestore = onSnapshot(
+          docRef,
+          (docSnap) => {
+            if (docSnap.exists()) {
+              const data = { _id: docSnap.id, ...docSnap.data() } as DonationSettings;
+              setLocalSettings(data);
+              callback(data);
+            }
+          },
+          (err) => {
+            console.warn('Firestore donation settings notice, using local data:', err.message);
           }
-        });
-        return unsubscribe;
+        );
       } catch (err) {
         console.warn('Firestore donation settings subscribe error:', err);
       }
     }
 
-    callback(getLocalSettings());
-    const handleUpdate = () => callback(getLocalSettings());
-    window.addEventListener('vatsalya_donation_settings_updated', handleUpdate);
-    return () => window.removeEventListener('vatsalya_donation_settings_updated', handleUpdate);
+    return () => {
+      window.removeEventListener('vatsalya_donation_settings_updated', notify);
+      if (unsubsFirestore) unsubsFirestore();
+    };
   },
 
   getSettings: async (): Promise<DonationSettings> => {
     if (isFirebaseConfigured && db) {
       try {
         const docRef = doc(db, COLLECTION_NAME, DOC_ID);
-        const docSnap = await getDoc(docRef);
+        const docSnap = await Promise.race([
+          getDoc(docRef),
+          new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000))
+        ]);
         if (docSnap.exists()) {
-          return { _id: docSnap.id, ...docSnap.data() } as DonationSettings;
+          const data = { _id: docSnap.id, ...docSnap.data() } as DonationSettings;
+          setLocalSettings(data);
+          return data;
         }
       } catch (err) {
-        console.warn('Failed to fetch donation settings from Firestore:', err);
+        console.warn('Failed to fetch donation settings from Firestore (using local):', err);
       }
     }
     return getLocalSettings();
   },
 
   updateSettings: async (settings: Partial<DonationSettings>): Promise<DonationSettings> => {
-    const current = await donationSettingsService.getSettings();
+    const current = getLocalSettings();
     const merged: DonationSettings = { ...current, ...settings };
 
-    if (isFirebaseConfigured && db) {
-      const docRef = doc(db, COLLECTION_NAME, DOC_ID);
-      const cleanData = cleanFirestoreData(merged);
-      delete cleanData._id;
-      await setDoc(docRef, cleanData, { merge: true });
-      return merged;
-    }
-
+    // 1. Save locally first (instant UI update)
     setLocalSettings(merged);
     window.dispatchEvent(new CustomEvent('vatsalya_donation_settings_updated'));
+
+    // 2. Background sync to Firestore
+    if (isFirebaseConfigured && db) {
+      try {
+        const docRef = doc(db, COLLECTION_NAME, DOC_ID);
+        const cleanData = cleanFirestoreData(merged);
+        delete cleanData._id;
+        await setDoc(docRef, cleanData, { merge: true });
+      } catch (err: any) {
+        console.warn('Firestore update donation settings notice:', err.message);
+      }
+    }
+
     return merged;
   }
 };

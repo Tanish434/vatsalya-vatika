@@ -23,58 +23,78 @@ const setLocalSiteSettings = (settings: SiteSettingsData) => {
 
 export const siteSettingsService = {
   subscribeToSiteSettings: (callback: (settings: SiteSettingsData) => void): (() => void) => {
+    let unsubsFirestore: (() => void) | null = null;
+
+    const notify = () => {
+      callback(getLocalSiteSettings());
+    };
+
+    window.addEventListener('vatsalya_site_settings_updated', notify);
+    notify();
+
     if (isFirebaseConfigured && db) {
       try {
         const docRef = doc(db, COLLECTION_NAME, DOC_ID);
-        const unsubscribe = onSnapshot(docRef, (docSnap) => {
+        unsubsFirestore = onSnapshot(docRef, (docSnap) => {
           if (docSnap.exists()) {
-            callback(docSnap.data() as SiteSettingsData);
-          } else {
-            setDoc(docRef, fallbackSiteSettings).catch(() => {});
-            callback(fallbackSiteSettings);
+            const data = docSnap.data() as SiteSettingsData;
+            setLocalSiteSettings(data);
+            callback(data);
           }
+        }, (err) => {
+          console.warn('Firestore site settings notice, using local data:', err.message);
         });
-        return unsubscribe;
       } catch (err) {
         console.warn('Firestore site settings subscribe error:', err);
       }
     }
 
-    callback(getLocalSiteSettings());
-    const handleUpdate = () => callback(getLocalSiteSettings());
-    window.addEventListener('vatsalya_site_settings_updated', handleUpdate);
-    return () => window.removeEventListener('vatsalya_site_settings_updated', handleUpdate);
+    return () => {
+      window.removeEventListener('vatsalya_site_settings_updated', notify);
+      if (unsubsFirestore) unsubsFirestore();
+    };
   },
 
   getSettings: async (): Promise<SiteSettingsData> => {
     if (isFirebaseConfigured && db) {
       try {
         const docRef = doc(db, COLLECTION_NAME, DOC_ID);
-        const docSnap = await getDoc(docRef);
+        const docSnap = await Promise.race([
+          getDoc(docRef),
+          new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000))
+        ]);
         if (docSnap.exists()) {
-          return docSnap.data() as SiteSettingsData;
+          const data = docSnap.data() as SiteSettingsData;
+          setLocalSiteSettings(data);
+          return data;
         }
       } catch (err) {
-        console.warn('Failed to load site settings from Firestore:', err);
+        console.warn('Failed to load site settings from Firestore (using local):', err);
       }
     }
     return getLocalSiteSettings();
   },
 
   updateSettings: async (data: Partial<SiteSettingsData>): Promise<SiteSettingsData> => {
-    const current = await siteSettingsService.getSettings();
+    const current = getLocalSiteSettings();
     const merged: SiteSettingsData = { ...current, ...data };
 
-    if (isFirebaseConfigured && db) {
-      const docRef = doc(db, COLLECTION_NAME, DOC_ID);
-      const cleanData = cleanFirestoreData(merged);
-      delete cleanData._id;
-      await setDoc(docRef, cleanData, { merge: true });
-      return merged;
-    }
-
+    // 1. Save locally first (instant UI update)
     setLocalSiteSettings(merged);
     window.dispatchEvent(new CustomEvent('vatsalya_site_settings_updated'));
+
+    // 2. Background sync to Firestore
+    if (isFirebaseConfigured && db) {
+      try {
+        const docRef = doc(db, COLLECTION_NAME, DOC_ID);
+        const cleanData = cleanFirestoreData(merged);
+        delete cleanData._id;
+        await setDoc(docRef, cleanData, { merge: true });
+      } catch (err: any) {
+        console.warn('Firestore site settings update notice:', err.message);
+      }
+    }
+
     return merged;
   }
 };
