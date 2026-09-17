@@ -1,5 +1,11 @@
 import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
-import { getFirestore, Firestore, enableIndexedDbPersistence } from 'firebase/firestore';
+import {
+  initializeFirestore,
+  getFirestore,
+  Firestore,
+  persistentLocalCache,
+  persistentMultipleTabManager
+} from 'firebase/firestore';
 import { getStorage, FirebaseStorage, ref, uploadBytesResumable, getDownloadURL, deleteObject } from 'firebase/storage';
 import { getAuth, Auth } from 'firebase/auth';
 
@@ -30,24 +36,24 @@ let auth: Auth | null = null;
 if (isFirebaseConfigured) {
   try {
     app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
-    db = getFirestore(app);
-    storage = getStorage(app);
-    auth = getAuth(app);
 
-    // Enable offline persistence in browser environments
+    // Multi-tab persistence (eliminates 15-20s lock hangs across browser tabs/laptops)
     if (typeof window !== 'undefined') {
       try {
-        enableIndexedDbPersistence(db).catch((err) => {
-          if (err.code === 'failed-precondition') {
-            console.warn('Firebase persistence: Multiple tabs open, persistence disabled for secondary tab.');
-          } else if (err.code === 'unimplemented') {
-            console.warn('Firebase persistence: Browser does not support indexedDB persistence.');
-          }
+        db = initializeFirestore(app, {
+          localCache: persistentLocalCache({
+            tabManager: persistentMultipleTabManager()
+          })
         });
       } catch {
-        // Safe catch
+        db = getFirestore(app);
       }
+    } else {
+      db = getFirestore(app);
     }
+
+    storage = getStorage(app);
+    auth = getAuth(app);
   } catch (error) {
     console.error('Failed to initialize Firebase:', error);
   }
@@ -68,8 +74,7 @@ export const cleanFirestoreData = <T extends Record<string, any>>(data: T): T =>
 export { app, db, storage, auth };
 
 /**
- * Uploads an image or video file directly to Firebase Storage with real-time progress.
- * If Firebase is not configured yet (local dev mode), compresses image via canvas or creates ObjectURL for instant dev preview.
+ * Uploads an image or video file directly to Cloudinary or Firebase Storage with real-time progress.
  */
 export const uploadMediaWithProgress = async (
   file: File,

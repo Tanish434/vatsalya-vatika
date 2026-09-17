@@ -7,31 +7,14 @@
     scroll-behavior: smooth;
   }
 
-  /* Ultra-smooth seamless color transition for all structural elements */
+  /* Smooth seamless color transition for structural elements only */
   body,
   header,
   nav,
   main,
-  footer,
-  section,
-  div,
-  button,
-  input,
-  textarea,
-  select,
-  span,
-  h1,
-  h2,
-  h3,
-  h4,
-  h5,
-  h6,
-  p,
-  a {
-    transition: background-color 0.35s cubic-bezier(0.4, 0, 0.2, 1),
-      border-color 0.35s cubic-bezier(0.4, 0, 0.2, 1),
-      color 0.35s cubic-bezier(0.4, 0, 0.2, 1),
-      box-shadow 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  footer {
+    transition: background-color 0.3s ease,
+      color 0.3s ease;
   }
 }
 

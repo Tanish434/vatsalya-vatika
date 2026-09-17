@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import nodemailer from 'nodemailer';
 
-export default async function handler(req: any, res: any) {
+export default async function handler(req: VercelRequest, res: VercelResponse) {
   // CORS Headers
   res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -23,12 +23,12 @@ export default async function handler(req: any, res: any) {
 
     const emailHost = process.env.EMAIL_HOST || 'smtp.gmail.com';
     const emailPort = parseInt(process.env.EMAIL_PORT || '587', 10);
-    const emailUser = process.env.EMAIL_USER || 'shivamindian65@gmail.com';
-    const emailPass = process.env.EMAIL_PASS || 'qmba ihsf ifcq euni';
+    const emailUser = process.env.EMAIL_USER;
+    const emailPass = process.env.EMAIL_PASS;
     const emailTo = process.env.EMAIL_TO || 'monuvatika@gmail.com';
 
     if (!emailUser || !emailPass) {
-      console.warn('[Email Alert] Skipping — emailUser or emailPass not configured');
+      console.warn('[Email Alert] Skipping — emailUser or emailPass not configured in environment variables');
       res.status(200).json({ success: false, message: 'Email credentials not configured' });
       return;
     }

@@ -7,6 +7,7 @@ import { HomePage } from './pages/HomePage';
 import { GalleryPage } from './pages/GalleryPage';
 import { AshramCardsPage } from './pages/AshramCardsPage';
 import { AdminDashboardPage } from './pages/AdminDashboardPage';
+import { ProtectedRoute } from './components/ProtectedRoute';
 
 export const App: React.FC = () => {
   return (
@@ -17,9 +18,30 @@ export const App: React.FC = () => {
             <Route path="/" element={<HomePage />} />
             <Route path="/gallery" element={<GalleryPage />} />
             <Route path="/cards" element={<AshramCardsPage />} />
-            <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
-            <Route path="/admin/login" element={<Navigate to="/admin/dashboard" replace />} />
-            <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
+            <Route
+              path="/admin"
+              element={
+                <ProtectedRoute adminOnly>
+                  <AdminDashboardPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/login"
+              element={
+                <ProtectedRoute adminOnly>
+                  <AdminDashboardPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/dashboard"
+              element={
+                <ProtectedRoute adminOnly>
+                  <AdminDashboardPage />
+                </ProtectedRoute>
+              }
+            />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Router>

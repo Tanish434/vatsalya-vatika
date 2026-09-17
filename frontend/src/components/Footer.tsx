@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Heart, Instagram, Facebook, Youtube, MessageCircle, X, ShieldCheck } from 'lucide-react';
 import { siteSettingsService } from '../services/siteSettingsService';
 
 export const Footer: React.FC = () => {
   const [showPrivacyModal, setShowPrivacyModal] = useState(false);
   const [whatsappHref, setWhatsappHref] = useState('https://wa.me/qr/T7URUC6LJNLCE1');
+  const location = useLocation();
+  const navigate = useNavigate();
 
   useEffect(() => {
     siteSettingsService.getSettings().then((settings) => {
@@ -38,8 +40,12 @@ export const Footer: React.FC = () => {
 
   const handleScroll = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
     e.preventDefault();
-    const el = document.querySelector(href);
-    if (el) el.scrollIntoView({ behavior: 'smooth' });
+    if (location.pathname !== '/') {
+      navigate(`/${href}`);
+    } else {
+      const el = document.querySelector(href);
+      if (el) el.scrollIntoView({ behavior: 'smooth' });
+    }
   };
 
   return (
