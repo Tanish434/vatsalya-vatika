@@ -161,6 +161,13 @@ export const AdminDashboardPage: React.FC = () => {
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
 
+  // Security safeguard: redirect if not authenticated or not an admin
+  useEffect(() => {
+    if (!isAuthenticated || user?.role !== 'admin') {
+      navigate('/', { replace: true });
+    }
+  }, [isAuthenticated, user, navigate]);
+
   const [activeTab, setActiveTab] = useState<'events' | 'gallery' | 'facilities' | 'messages' | 'contributions' | 'users' | 'settings' | 'donation_settings' | 'reviews' | 'activity' | 'memoryvault' | 'our_students' | 'carousel'>('events');
 
   // Data states
@@ -627,7 +634,7 @@ export const AdminDashboardPage: React.FC = () => {
         toast.success('Gallery item updated successfully');
       } else {
         const created = await galleryService.createGalleryItem(galleryForm);
-        setGallery((prev) => [created, ...prev]);
+        setGallery((prev) => [...prev, created]);
         toast.success('Gallery item added successfully');
       }
       setShowGalleryModal(false);

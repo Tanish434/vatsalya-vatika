@@ -14,7 +14,6 @@ import {
 import { db, isFirebaseConfigured, cleanFirestoreData } from '../lib/firebase';
 import { ReviewItem } from '../types';
 import { activityService } from './activityService';
-import { fallbackReviews } from './fallbackData';
 
 const COLLECTION_NAME = 'reviews';
 const STORAGE_KEY = 'vatsalya_local_reviews';
@@ -22,9 +21,12 @@ const STORAGE_KEY = 'vatsalya_local_reviews';
 const getLocalReviews = (): ReviewItem[] => {
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) return JSON.parse(saved);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed)) return parsed;
+    }
   } catch {}
-  return fallbackReviews;
+  return [];
 };
 
 const setLocalReviews = (items: ReviewItem[]) => {
@@ -39,17 +41,12 @@ export const reviewService = {
       try {
         const q = query(
           collection(db, COLLECTION_NAME),
-          where('approved', '==', true),
           orderBy('createdAt', 'desc')
         );
         const unsubscribe = onSnapshot(
           q,
           (snapshot) => {
-            if (snapshot.empty) {
-              callback(fallbackReviews.filter((r) => r.approved));
-              return;
-            }
-            const items: ReviewItem[] = snapshot.docs.map((docSnap) => {
+            const allItems: ReviewItem[] = snapshot.docs.map((docSnap) => {
               const data = docSnap.data();
               return {
                 _id: docSnap.id,
@@ -61,7 +58,9 @@ export const reviewService = {
                 createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.createdAt || new Date().toISOString()
               };
             });
-            callback(items);
+            setLocalReviews(allItems);
+            const approvedItems = allItems.filter((r) => r.approved);
+            callback(approvedItems);
           },
           (err) => {
             console.warn('Firestore public reviews subscribe error:', err);
@@ -74,7 +73,8 @@ export const reviewService = {
       }
     }
 
-    callback(getLocalReviews().filter((r) => r.approved));
+    const cached = getLocalReviews().filter((r) => r.approved);
+    if (cached.length > 0) callback(cached);
     const handleUpdate = () => callback(getLocalReviews().filter((r) => r.approved));
     window.addEventListener('vatsalya_reviews_updated', handleUpdate);
     return () => window.removeEventListener('vatsalya_reviews_updated', handleUpdate);
@@ -87,10 +87,6 @@ export const reviewService = {
         const unsubscribe = onSnapshot(
           q,
           (snapshot) => {
-            if (snapshot.empty) {
-              callback(fallbackReviews);
-              return;
-            }
             const items: ReviewItem[] = snapshot.docs.map((docSnap) => {
               const data = docSnap.data();
               return {
@@ -103,6 +99,7 @@ export const reviewService = {
                 createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.createdAt || new Date().toISOString()
               };
             });
+            setLocalReviews(items);
             callback(items);
           },
           (err) => {
@@ -116,7 +113,8 @@ export const reviewService = {
       }
     }
 
-    callback(getLocalReviews());
+    const cached = getLocalReviews();
+    if (cached.length > 0) callback(cached);
     const handleUpdate = () => callback(getLocalReviews());
     window.addEventListener('vatsalya_reviews_updated', handleUpdate);
     return () => window.removeEventListener('vatsalya_reviews_updated', handleUpdate);
@@ -125,10 +123,10 @@ export const reviewService = {
   getPublicReviews: async (): Promise<ReviewItem[]> => {
     if (isFirebaseConfigured && db) {
       try {
-        const q = query(collection(db, COLLECTION_NAME), where('approved', '==', true), orderBy('createdAt', 'desc'));
+        const q = query(collection(db, COLLECTION_NAME), orderBy('createdAt', 'desc'));
         const snapshot = await getDocs(q);
         if (!snapshot.empty) {
-          return snapshot.docs.map((docSnap) => {
+          const all = snapshot.docs.map((docSnap) => {
             const data = docSnap.data();
             return {
               _id: docSnap.id,
@@ -140,6 +138,7 @@ export const reviewService = {
               createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.createdAt || new Date().toISOString()
             };
           });
+          return all.filter((r) => r.approved);
         }
       } catch (err) {
         console.warn('Failed to load public reviews from Firestore:', err);

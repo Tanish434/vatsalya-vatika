@@ -18,9 +18,12 @@ const STORAGE_KEY = 'vatsalya_local_memory_vault';
 const getLocalCards = (): MemoryVaultCard[] => {
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) return JSON.parse(saved);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed)) return parsed;
+    }
   } catch {}
-  return fallbackMemoryVaultCards;
+  return [];
 };
 
 const setLocalCards = (items: MemoryVaultCard[]) => {
@@ -36,10 +39,6 @@ export const memoryVaultService = {
         const unsubscribe = onSnapshot(
           collection(db, COLLECTION_NAME),
           (snapshot) => {
-            if (snapshot.empty) {
-              callback(fallbackMemoryVaultCards);
-              return;
-            }
             const items: MemoryVaultCard[] = snapshot.docs.map((docSnap, index) => {
               const data = docSnap.data();
               return {

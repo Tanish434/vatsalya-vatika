@@ -12,7 +12,6 @@ import {
 } from 'firebase/firestore';
 import { db, isFirebaseConfigured, deleteMediaFromStorage, cleanFirestoreData } from '../lib/firebase';
 import { EventItem } from '../types';
-import { fallbackEvents } from './fallbackData';
 
 const COLLECTION_NAME = 'events';
 const STORAGE_KEY = 'vatsalya_local_events';
@@ -20,11 +19,14 @@ const STORAGE_KEY = 'vatsalya_local_events';
 const getLocalFallbackEvents = (): EventItem[] => {
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) return JSON.parse(saved);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed)) return parsed;
+    }
   } catch {
     // ignore
   }
-  return fallbackEvents;
+  return [];
 };
 
 const setLocalFallbackEvents = (items: EventItem[]) => {
@@ -43,10 +45,6 @@ export const eventService = {
         const unsubscribe = onSnapshot(
           q,
           (snapshot) => {
-            if (snapshot.empty) {
-              callback(fallbackEvents);
-              return;
-            }
             const items: EventItem[] = snapshot.docs.map((docSnap) => {
               const data = docSnap.data();
               return {
@@ -61,6 +59,7 @@ export const eventService = {
                 createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.createdAt || new Date().toISOString()
               };
             });
+            setLocalFallbackEvents(items);
             callback(items);
           },
           (err) => {
@@ -74,7 +73,8 @@ export const eventService = {
       }
     }
 
-    callback(getLocalFallbackEvents());
+    const cached = getLocalFallbackEvents();
+    if (cached.length > 0) callback(cached);
     const handleLocalUpdate = () => callback(getLocalFallbackEvents());
     window.addEventListener('vatsalya_events_updated', handleLocalUpdate);
     return () => window.removeEventListener('vatsalya_events_updated', handleLocalUpdate);

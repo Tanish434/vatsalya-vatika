@@ -12,21 +12,20 @@ import {
 } from 'firebase/firestore';
 import { db, isFirebaseConfigured, deleteMediaFromStorage, cleanFirestoreData } from '../lib/firebase';
 import { GalleryItem } from '../types';
-import { fallbackGallery } from './fallbackData';
 
 const COLLECTION_NAME = 'gallery';
 const STORAGE_KEY = 'vatsalya_local_gallery';
 
-// Local persistent cache
+// Local cache for fast rendering
 export const getLocalFallbackGallery = (): GalleryItem[] => {
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
       const parsed = JSON.parse(saved);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed)) return parsed;
     }
   } catch {}
-  return fallbackGallery;
+  return [];
 };
 
 export const setLocalFallbackGallery = (items: GalleryItem[]) => {
@@ -40,50 +39,45 @@ export const galleryService = {
     let unsubsFirestore: (() => void) | null = null;
 
     const notify = () => {
-      callback(getLocalFallbackGallery());
+      const cached = getLocalFallbackGallery();
+      if (cached.length > 0) {
+        callback(cached);
+      }
     };
 
-    // 1. Listen to instant local updates
-    window.addEventListener('vatsalya_gallery_updated', notify);
+    // 1. If we have cached items from a previous session, show them immediately
     notify();
+    window.addEventListener('vatsalya_gallery_updated', notify);
 
-    // 2. Connect to Firestore live stream if active
+    // 2. Connect to Firestore live stream with chronological ordering (oldest at top, newest at bottom)
     if (isFirebaseConfigured && db) {
       try {
-        const q = query(collection(db, COLLECTION_NAME), orderBy('createdAt', 'desc'));
+        const q = query(collection(db, COLLECTION_NAME), orderBy('createdAt', 'asc'));
         unsubsFirestore = onSnapshot(
           q,
           (snapshot) => {
-            if (!snapshot.empty) {
-              const remoteItems: GalleryItem[] = snapshot.docs.map((docSnap) => {
-                const data = docSnap.data();
-                return {
-                  _id: docSnap.id,
-                  title: data.title || '',
-                  image: data.image || '',
-                  mediaType: data.mediaType || (data.image?.endsWith('.mp4') || data.image?.includes('video') ? 'video' : 'image'),
-                  videoUrl: data.videoUrl || (data.mediaType === 'video' ? data.image : undefined),
-                  category: data.category || 'Ashram',
-                  description: data.description || '',
-                  focalPoint: data.focalPoint || { x: 50, y: 50 },
-                  createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.createdAt || new Date().toISOString()
-                };
-              });
+            const remoteItems: GalleryItem[] = snapshot.docs.map((docSnap) => {
+              const data = docSnap.data();
+              return {
+                _id: docSnap.id,
+                title: data.title || '',
+                image: data.image || '',
+                mediaType: data.mediaType || (data.image?.endsWith('.mp4') || data.image?.includes('video') ? 'video' : 'image'),
+                videoUrl: data.videoUrl || (data.mediaType === 'video' ? data.image : undefined),
+                category: data.category || 'Ashram',
+                description: data.description || '',
+                focalPoint: data.focalPoint || { x: 50, y: 50 },
+                createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.createdAt || new Date().toISOString()
+              };
+            });
 
-              // Merge local items with remote items to prevent data loss
-              const localItems = getLocalFallbackGallery();
-              const mergedMap = new Map<string, GalleryItem>();
-              remoteItems.forEach((i) => mergedMap.set(i._id, i));
-              localItems.forEach((i) => {
-                if (!mergedMap.has(i._id)) mergedMap.set(i._id, i);
-              });
-              const combined = Array.from(mergedMap.values());
-              setLocalFallbackGallery(combined);
-              callback(combined);
-            }
+            // Persist remote items and update callback
+            setLocalFallbackGallery(remoteItems);
+            callback(remoteItems);
           },
           (err) => {
-            console.warn('Firestore gallery snapshot notice, serving local data:', err.message);
+            console.warn('Firestore gallery snapshot notice, serving cached data:', err.message);
+            callback(getLocalFallbackGallery());
           }
         );
       } catch (e) {
@@ -100,26 +94,24 @@ export const galleryService = {
   getGallery: async (): Promise<GalleryItem[]> => {
     if (isFirebaseConfigured && db) {
       try {
-        const q = query(collection(db, COLLECTION_NAME), orderBy('createdAt', 'desc'));
+        const q = query(collection(db, COLLECTION_NAME), orderBy('createdAt', 'asc'));
         const snapshot = await getDocs(q);
-        if (!snapshot.empty) {
-          const remote = snapshot.docs.map((docSnap) => {
-            const data = docSnap.data();
-            return {
-              _id: docSnap.id,
-              title: data.title || '',
-              image: data.image || '',
-              mediaType: data.mediaType || 'image',
-              videoUrl: data.videoUrl,
-              category: data.category || 'Ashram',
-              description: data.description || '',
-              focalPoint: data.focalPoint || { x: 50, y: 50 },
-              createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.createdAt || new Date().toISOString()
-            };
-          });
-          setLocalFallbackGallery(remote);
-          return remote;
-        }
+        const remote = snapshot.docs.map((docSnap) => {
+          const data = docSnap.data();
+          return {
+            _id: docSnap.id,
+            title: data.title || '',
+            image: data.image || '',
+            mediaType: data.mediaType || 'image',
+            videoUrl: data.videoUrl,
+            category: data.category || 'Ashram',
+            description: data.description || '',
+            focalPoint: data.focalPoint || { x: 50, y: 50 },
+            createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.createdAt || new Date().toISOString()
+          };
+        });
+        setLocalFallbackGallery(remote);
+        return remote;
       } catch (err) {
         console.warn('Using local persistent gallery store:', err);
       }
@@ -130,7 +122,7 @@ export const galleryService = {
   createGalleryItem: async (data: Partial<GalleryItem>): Promise<GalleryItem> => {
     const isVideo = data.mediaType === 'video' || data.image?.includes('video/') || data.image?.endsWith('.mp4');
     const newItem: Partial<GalleryItem> = {
-      title: data.title || 'Untitled',
+      title: data.title || '',
       image: data.image || '',
       mediaType: isVideo ? 'video' : 'image',
       category: data.category || 'Ashram',
@@ -141,14 +133,14 @@ export const galleryService = {
       newItem.videoUrl = data.videoUrl || data.image;
     }
 
-    // 1. Immediately create & save locally so user sees it in 0ms
+    // 1. Immediately create & append to bottom locally so user sees it in 0ms (chronological order)
     const current = getLocalFallbackGallery();
     const created: GalleryItem = {
       _id: `gal-${Date.now()}`,
       ...newItem,
       createdAt: new Date().toISOString()
     } as GalleryItem;
-    const updated = [created, ...current];
+    const updated = [...current, created];
     setLocalFallbackGallery(updated);
     window.dispatchEvent(new CustomEvent('vatsalya_gallery_updated'));
 

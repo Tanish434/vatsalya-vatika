@@ -12,7 +12,6 @@ import {
 } from 'firebase/firestore';
 import { db, isFirebaseConfigured, deleteMediaFromStorage, cleanFirestoreData } from '../lib/firebase';
 import { StudentImage } from '../types';
-import { fallbackStudentImages } from './fallbackData';
 
 const COLLECTION_NAME = 'student_images';
 const STORAGE_KEY = 'vatsalya_local_student_images';
@@ -20,9 +19,12 @@ const STORAGE_KEY = 'vatsalya_local_student_images';
 const getLocalStudentImages = (): StudentImage[] => {
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) return JSON.parse(saved);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed)) return parsed;
+    }
   } catch {}
-  return fallbackStudentImages;
+  return [];
 };
 
 const setLocalStudentImages = (items: StudentImage[]) => {
@@ -39,10 +41,6 @@ export const studentImageService = {
         const unsubscribe = onSnapshot(
           q,
           (snapshot) => {
-            if (snapshot.empty) {
-              callback(fallbackStudentImages);
-              return;
-            }
             const items: StudentImage[] = snapshot.docs.map((docSnap) => {
               const data = docSnap.data();
               return {
@@ -54,6 +52,7 @@ export const studentImageService = {
                 createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.createdAt || new Date().toISOString()
               };
             });
+            setLocalStudentImages(items);
             callback(items);
           },
           (err) => {
@@ -67,7 +66,9 @@ export const studentImageService = {
       }
     }
 
-    callback(getLocalStudentImages());
+    const cached = getLocalStudentImages();
+    if (cached.length > 0) callback(cached);
+
     const handleUpdate = () => callback(getLocalStudentImages());
     window.addEventListener('vatsalya_student_images_updated', handleUpdate);
     return () => window.removeEventListener('vatsalya_student_images_updated', handleUpdate);
@@ -78,19 +79,19 @@ export const studentImageService = {
       try {
         const q = query(collection(db, COLLECTION_NAME), orderBy('createdAt', 'desc'));
         const snapshot = await getDocs(q);
-        if (!snapshot.empty) {
-          return snapshot.docs.map((docSnap) => {
-            const data = docSnap.data();
-            return {
-              _id: docSnap.id,
-              title: data.title || '',
-              image: data.image || '',
-              description: data.description || '',
-              focalPoint: data.focalPoint || { x: 50, y: 50 },
-              createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.createdAt || new Date().toISOString()
-            };
-          });
-        }
+        const remote = snapshot.docs.map((docSnap) => {
+          const data = docSnap.data();
+          return {
+            _id: docSnap.id,
+            title: data.title || '',
+            image: data.image || '',
+            description: data.description || '',
+            focalPoint: data.focalPoint || { x: 50, y: 50 },
+            createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.createdAt || new Date().toISOString()
+          };
+        });
+        setLocalStudentImages(remote);
+        return remote;
       } catch (err) {
         console.warn('Failed to fetch student images from Firestore:', err);
       }
@@ -112,11 +113,15 @@ export const studentImageService = {
         createdAt: serverTimestamp()
       });
       const docRef = await addDoc(collection(db, COLLECTION_NAME), cleanData);
-      return {
+      const created = {
         _id: docRef.id,
         ...newItem,
         createdAt: new Date().toISOString()
       } as StudentImage;
+      const current = getLocalStudentImages();
+      setLocalStudentImages([created, ...current]);
+      window.dispatchEvent(new CustomEvent('vatsalya_student_images_updated'));
+      return created;
     }
 
     const current = getLocalStudentImages();
@@ -136,6 +141,10 @@ export const studentImageService = {
       const updateData: any = { ...data };
       delete updateData._id;
       await updateDoc(docRef, cleanFirestoreData(updateData));
+      const current = getLocalStudentImages();
+      const updated = current.map((item) => (item._id === id ? { ...item, ...data } : item));
+      setLocalStudentImages(updated);
+      window.dispatchEvent(new CustomEvent('vatsalya_student_images_updated'));
       return { _id: id, ...data } as StudentImage;
     }
 
@@ -153,7 +162,6 @@ export const studentImageService = {
 
     if (isFirebaseConfigured && db) {
       await deleteDoc(doc(db, COLLECTION_NAME, id));
-      return;
     }
 
     const current = getLocalStudentImages();

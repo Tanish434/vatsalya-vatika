@@ -13,7 +13,6 @@ import {
 } from 'firebase/firestore';
 import { db, isFirebaseConfigured, deleteMediaFromStorage, cleanFirestoreData } from '../lib/firebase';
 import { CarouselImage } from '../types';
-import { fallbackCarouselImages } from './fallbackData';
 
 const COLLECTION_NAME = 'carousel';
 const STORAGE_KEY = 'vatsalya_local_carousel';
@@ -21,9 +20,12 @@ const STORAGE_KEY = 'vatsalya_local_carousel';
 const getLocalCarousel = (): CarouselImage[] => {
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) return JSON.parse(saved);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed)) return parsed;
+    }
   } catch {}
-  return fallbackCarouselImages;
+  return [];
 };
 
 const setLocalCarousel = (items: CarouselImage[]) => {
@@ -40,10 +42,6 @@ export const carouselService = {
         const unsubscribe = onSnapshot(
           q,
           (snapshot) => {
-            if (snapshot.empty) {
-              callback(fallbackCarouselImages);
-              return;
-            }
             const items: CarouselImage[] = snapshot.docs.map((docSnap) => {
               const data = docSnap.data();
               return {
@@ -58,6 +56,7 @@ export const carouselService = {
                 createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.createdAt || new Date().toISOString()
               };
             });
+            setLocalCarousel(items);
             callback(items);
           },
           (err) => {
@@ -71,7 +70,8 @@ export const carouselService = {
       }
     }
 
-    callback(getLocalCarousel());
+    const cached = getLocalCarousel();
+    if (cached.length > 0) callback(cached);
     const handleUpdate = () => callback(getLocalCarousel());
     window.addEventListener('vatsalya_carousel_updated', handleUpdate);
     return () => window.removeEventListener('vatsalya_carousel_updated', handleUpdate);
