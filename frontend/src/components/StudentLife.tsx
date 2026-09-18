@@ -56,7 +56,6 @@ export const StudentLife: React.FC = () => {
         ) : students.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-10">
             {students.map((item, index) => {
-              const Icon = index === 0 ? BookOpen : index === 1 ? Trophy : Sprout;
               return (
                 <div 
                   key={item._id || index}
@@ -71,9 +70,6 @@ export const StudentLife: React.FC = () => {
                       className="w-full h-full object-cover transform group-hover:scale-110 transition-transform duration-700"
                       style={{ objectPosition: item.focalPoint ? `${item.focalPoint.x}% ${item.focalPoint.y}%` : 'top center' }}
                     />
-                    <div className="absolute top-4 right-4 z-20 bg-white/90 dark:bg-darkAshram-surface/90 backdrop-blur-sm p-3 rounded-2xl shadow-soft">
-                      <Icon className="w-5 h-5 text-ashram-saffron dark:text-darkAshram-gold" />
-                    </div>
                   </div>
 
                   <div className="p-4 flex flex-col flex-grow">

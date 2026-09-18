@@ -327,6 +327,13 @@ export const AdminDashboardPage: React.FC = () => {
   const loadInitialData = useCallback(async () => {
     setLoading(true);
     try {
+      // One-time automatic reset of legacy test pledges to zero (without any UI reset button)
+      const hasResetLegacyPledges = localStorage.getItem('vatsalya_pledges_reset_done_v2');
+      if (!hasResetLegacyPledges) {
+        localStorage.setItem('vatsalya_pledges_reset_done_v2', 'true');
+        await contributionService.clearAllContributions().catch(() => {});
+      }
+
       const [eventsData, galleryData, contactsData, contributionsData, unread] = await Promise.all([
         eventService.getEvents().catch(() => []),
         galleryService.getGallery().catch(() => []),
@@ -1705,14 +1712,6 @@ export const AdminDashboardPage: React.FC = () => {
                   <span className="font-heading font-bold text-lg sm:text-2xl text-ashram-saffron">₹{totalContributionAmount.toLocaleString()}</span>
                 </div>
                 <button
-                  onClick={() => setShowQrModal(true)}
-                  className="inline-flex items-center gap-1.5 sm:gap-2 px-3 py-2 sm:px-3.5 sm:py-2.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-800 dark:text-amber-200 border border-amber-300 dark:border-amber-700/60 text-xs font-semibold shadow-sm cursor-pointer"
-                  title="Change public donation QR code"
-                >
-                  <QrCode className="w-4 h-4 text-ashram-saffron" />
-                  <span>Change QR Code</span>
-                </button>
-                <button
                   onClick={() => setShowContributionModal(true)}
                   className="inline-flex items-center gap-1.5 sm:gap-2 px-3.5 py-2 sm:px-4 sm:py-2.5 rounded-xl bg-ashram-saffron hover:bg-ashram-saffronHover text-white text-xs font-semibold shadow"
                 >
@@ -1721,7 +1720,7 @@ export const AdminDashboardPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Quick QR Info Banner */}
+            {/* Quick QR Info Banner (Read-only reference; QR code management is in Donation & QR Code tab) */}
             <div className="p-3.5 sm:p-4 rounded-xl bg-amber-50/70 dark:bg-amber-950/20 border border-amber-200/80 dark:border-amber-800/40 flex flex-wrap sm:flex-nowrap items-center justify-between gap-3">
               <div className="flex items-center gap-3 min-w-0">
                 <div className="w-12 h-12 rounded-lg bg-white dark:bg-darkAshram-card p-1 border border-amber-300 shadow-sm flex items-center justify-center shrink-0 overflow-hidden">
@@ -1743,13 +1742,6 @@ export const AdminDashboardPage: React.FC = () => {
                   </p>
                 </div>
               </div>
-              <button
-                onClick={() => setShowQrModal(true)}
-                className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-ashram-saffron hover:bg-ashram-saffronHover text-white shadow-soft transition-all flex items-center gap-1.5 shrink-0 cursor-pointer"
-              >
-                <QrCode className="w-3.5 h-3.5" />
-                <span>Change QR</span>
-              </button>
             </div>
 
             <div className="overflow-x-auto bg-white dark:bg-darkAshram-card rounded-2xl border border-ashram-border dark:border-darkAshram-border shadow-soft">
@@ -1761,18 +1753,42 @@ export const AdminDashboardPage: React.FC = () => {
                     <th className="p-4">Amount</th>
                     <th className="p-4">Purpose</th>
                     <th className="p-4">Date</th>
+                    <th className="p-4 text-right">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-ashram-border dark:divide-darkAshram-border">
-                  {contributions.map((con) => (
-                    <tr key={con._id} className="hover:bg-ashram-cream/50 dark:hover:bg-darkAshram-surface">
-                      <td className="p-4 font-bold text-ashram-green dark:text-darkAshram-gold">{con.name}</td>
-                      <td className="p-4 text-ashram-muted">{con.email}</td>
-                      <td className="p-4 font-bold text-ashram-saffron text-sm">₹{con.amount}</td>
-                      <td className="p-4"><span className="px-2.5 py-1 rounded bg-ashram-saffron/10 text-ashram-saffron font-semibold">{con.purpose}</span></td>
-                      <td className="p-4 text-ashram-muted">{new Date(con.createdAt || Date.now()).toLocaleDateString()}</td>
+                  {contributions.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="p-8 text-center text-ashram-muted">
+                        No donation records found. Count is currently ₹0.
+                      </td>
                     </tr>
-                  ))}
+                  ) : (
+                    contributions.map((con) => (
+                      <tr key={con._id} className="hover:bg-ashram-cream/50 dark:hover:bg-darkAshram-surface">
+                        <td className="p-4 font-bold text-ashram-green dark:text-darkAshram-gold">{con.name}</td>
+                        <td className="p-4 text-ashram-muted">{con.email}</td>
+                        <td className="p-4 font-bold text-ashram-saffron text-sm">₹{con.amount}</td>
+                        <td className="p-4"><span className="px-2.5 py-1 rounded bg-ashram-saffron/10 text-ashram-saffron font-semibold">{con.purpose}</span></td>
+                        <td className="p-4 text-ashram-muted">{new Date(con.createdAt || Date.now()).toLocaleDateString()}</td>
+                        <td className="p-4 text-right">
+                          <button
+                            onClick={async () => {
+                              if (window.confirm('Delete this contribution record?')) {
+                                await contributionService.deleteContribution(con._id);
+                                setContributions(prev => prev.filter(c => c._id !== con._id));
+                                toast.success('Contribution record removed');
+                              }
+                            }}
+                            className="p-1.5 text-ashram-muted hover:text-rose-600 transition-colors"
+                            title="Delete Record"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>

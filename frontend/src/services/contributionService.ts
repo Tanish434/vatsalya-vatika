@@ -3,6 +3,8 @@ import {
   onSnapshot,
   addDoc,
   getDocs,
+  deleteDoc,
+  doc,
   query,
   orderBy,
   serverTimestamp
@@ -19,26 +21,7 @@ const getLocalContributions = (): ContributionRecord[] => {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) return JSON.parse(saved);
   } catch {}
-  return [
-    {
-      _id: 'contrib-1',
-      name: 'Rajesh Sharma',
-      email: 'rajesh@example.com',
-      amount: 5100,
-      purpose: 'Education',
-      paymentStatus: 'completed',
-      createdAt: new Date().toISOString()
-    },
-    {
-      _id: 'contrib-2',
-      name: 'Ananya Gupta',
-      email: 'ananya@example.com',
-      amount: 11000,
-      purpose: 'Food',
-      paymentStatus: 'completed',
-      createdAt: new Date().toISOString()
-    }
-  ];
+  return [];
 };
 
 const setLocalContributions = (items: ContributionRecord[]) => {
@@ -180,5 +163,40 @@ export const contributionService = {
       }
     }
     return getLocalContributions();
+  },
+
+  deleteContribution: async (id: string): Promise<void> => {
+    const current = getLocalContributions();
+    const updated = current.filter((c) => c._id !== id);
+    setLocalContributions(updated);
+    window.dispatchEvent(new CustomEvent('vatsalya_contributions_updated'));
+
+    if (isFirebaseConfigured && db) {
+      const firestore = db;
+      try {
+        await deleteDoc(doc(firestore, COLLECTION_NAME, id));
+      } catch (err) {
+        console.warn('Firestore delete contribution error:', err);
+      }
+    }
+  },
+
+  clearAllContributions: async (): Promise<void> => {
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch {}
+    setLocalContributions([]);
+    window.dispatchEvent(new CustomEvent('vatsalya_contributions_updated'));
+
+    if (isFirebaseConfigured && db) {
+      const firestore = db;
+      try {
+        const snapshot = await getDocs(collection(firestore, COLLECTION_NAME));
+        const deletePromises = snapshot.docs.map((docSnap) => deleteDoc(doc(firestore, COLLECTION_NAME, docSnap.id)));
+        await Promise.all(deletePromises);
+      } catch (err) {
+        console.warn('Failed to clear Firestore contributions:', err);
+      }
+    }
   }
 };
